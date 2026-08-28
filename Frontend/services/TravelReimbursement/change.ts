@@ -21,6 +21,7 @@ import {
   ReimbursementLineInput,
   normalizeChargeableFlag,
   normalizeLineAmount,
+  assertInvoiceSaveCurrencyConsistency,
 } from './_shared';
 
 export interface ChangeTravelReimbursementInput {
@@ -270,6 +271,7 @@ export async function changeTravelReimbursement(
     targetProjectId,
     targetUserId,
   );
+  assertInvoiceSaveCurrencyConsistency(validated.map((item) => item.invoice));
   const addedInvoices = validated.filter((x) => !x.isExistingLine).map((x) => x.invoice);
   const removedInvoiceNos = oldInvoiceNos.filter((no) => !nextInvoiceNos.includes(no));
   const openedInvoiceNos: string[] = [];
@@ -282,7 +284,7 @@ export async function changeTravelReimbursement(
     await deleteLinesByHeader(nextHeader);
 
     const newLines: ReimbursementLine[] = [];
-    for (const item of validated) {
+    for (const [index, item] of validated.entries()) {
       const trAmount =
         item.requestedTrAmount ??
         oldLineAmountMap.get(item.invoice.invoiceno) ??
@@ -301,6 +303,7 @@ export async function changeTravelReimbursement(
         trAmount,
         trChargeable,
         txChargeable,
+        index + 1,
       );
       newLines.push(line);
     }
@@ -326,6 +329,7 @@ export async function changeTravelReimbursement(
         oldLine.tr_amount,
         oldLine.trchargeable,
         oldLine.txchargeable,
+        oldLine.seqno,
       ).catch(() => undefined);
     }
 

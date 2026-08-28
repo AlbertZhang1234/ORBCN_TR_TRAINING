@@ -164,12 +164,3 @@ export const STATUS_NORMALIZERS = {
     ['已记账', 'BOOKED'],
   ]),
 };
-
-export const BOOKING_CODE_HINTS: Array<{ code: string; aliases: string[] }> = [
-  { code: 'PARK', aliases: ['park', 'parking', '停车', '停车费', '停车场', '车位'] },
-  { code: 'TAXI', aliases: ['taxi', 'uber', 'didi', 'ride hailing', 'ride-hailing', '打车', '出租车', '网约车', '滴滴', '代驾', '快车', '专车'] },
-  { code: 'AUTG', aliases: ['autg', 'highway', 'toll', 'bridge fee', 'etc', '高速', '高速费', '过路', '过路费', '过桥', '过桥费', '路桥'] },
-  { code: 'BENL', aliases: ['benl', 'fuel', 'petrol', 'gasoline', 'diesel', '加油', '加油费', '燃油', '汽油', '柴油'] },
-  { code: 'BEWI', aliases: ['bewi', 'meal', 'meals', 'dining', 'restaurant', 'hospitality', '餐饮', '吃饭', '工作餐', '饭店', '餐厅', '招待'] },
-  { code: 'SOBE', aliases: ['sobe', 'misc', 'miscellaneous', '杂项', '未分类', '无法识别'] },
-] as const;

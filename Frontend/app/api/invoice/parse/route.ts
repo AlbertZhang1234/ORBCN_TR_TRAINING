@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiAuth } from '@/services/_server/apiAuth';
+import { listBookingRules } from '@/services/Invoice/booking-rules';
 
 function getParseEndpoint(): string {
   return (
@@ -25,6 +26,11 @@ export async function POST(request: Request) {
 
     const upstreamFormData = new FormData();
     upstreamFormData.append('file', file, file.name || 'invoice.pdf');
+    const bookingRules = await listBookingRules();
+    if (bookingRules.length === 0) {
+      return NextResponse.json({ message: 'No active booking rules configured' }, { status: 503 });
+    }
+    upstreamFormData.append('booking_rules', JSON.stringify(bookingRules));
 
     const response = await fetch(getParseEndpoint(), {
       method: 'POST',

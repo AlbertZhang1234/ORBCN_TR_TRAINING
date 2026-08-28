@@ -1,0 +1,6 @@
+interface:
+  display_name: "SAP OData 集成"
+  short_description: "安全、快速地将应用连接到 SAP OData"
+  default_prompt: "使用 $sap-odata-integration 将当前应用连接到 SAP OData 服务，并验证集成结果。"
+policy:
+  allow_implicit_invocation: true

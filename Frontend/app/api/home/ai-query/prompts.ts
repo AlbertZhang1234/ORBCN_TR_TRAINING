@@ -1,13 +1,5 @@
 import type { OttoField, OttoGroupField, OttoMetric, OttoQueryResult, OttoRuntimeMetadata, OttoToolInput } from './ottoVTrAllTool';
-
-const BOOKING_CODE_GUIDE = [
-  'PARK = 停车费 / Parking / 车位停车场',
-  'TAXI = 出租车 / 网约车 / 打车 / 代驾',
-  'AUTG = 高速费 / 过路费 / 过桥费 / ETC / 路桥',
-  'BENL = 加油费 / 燃油费 / Petrol / Diesel / Fuel',
-  'BEWI = 餐饮 / 工作餐 / Hospitality / Dining / Meals',
-  'SOBE = 其他 / 未明确分类 / Others / Unclassified',
-] as const;
+import type { BookingRuleRecord } from '../../../../services/Invoice/booking-rules';
 
 const APPROVAL_STATUS_GUIDE = [
   'APPROVED = approved / 通过 / 已通过 / 审批通过',
@@ -93,7 +85,7 @@ export function buildFieldCatalogPrompt(): string {
       field: 'bookingcode',
       type: 'text',
       role: 'invoice category code',
-      aliases: ['费用类别', 'booking code', '报销类别', '高速费', '过路费', '停车费', '打车', '加油费', '餐饮', '其他'],
+      aliases: ['费用类别', 'booking code', '报销类别', '记账规则'],
     },
     { field: 'currency', type: 'text', role: 'currency', aliases: ['币种'] },
     { field: 'invoice_status', type: 'text', role: 'invoice workflow status', aliases: ['发票状态'] },
@@ -126,7 +118,10 @@ export function buildMetadataPrompt(metadata: OttoRuntimeMetadata): string {
   return lines.join('\n');
 }
 
-export function buildPlannerPrompt(metadata: OttoRuntimeMetadata): string {
+export function buildPlannerPrompt(
+  metadata: OttoRuntimeMetadata,
+  bookingRules: BookingRuleRecord[],
+): string {
   const today = new Date().toISOString().slice(0, 10);
   return [
     'You are planning arguments for the otto_v_tr_all_query tool.',
@@ -153,7 +148,10 @@ export function buildPlannerPrompt(metadata: OttoRuntimeMetadata): string {
     '- Prefer structured filters over searchTerms whenever the field is clear.',
     '- If a field currently has zero non-empty values, do not force a filter on it. Example: if travel_destination has 0 non-empty rows, destination questions should still set groupBy or filter there when asked, but do not invent destination values.',
     '- bookingcode values are short codes. Map natural language expense descriptions to bookingcode using this guide:',
-    ...BOOKING_CODE_GUIDE.map((line) => `  - ${line}`),
+    ...bookingRules.map((rule) => {
+      const aliases = [rule.name_zh, rule.name_en, ...(rule.keywords ?? [])].filter(Boolean).join(' / ');
+      return `  - ${rule.code} = ${aliases}`;
+    }),
     '- approvalstatus must use canonical values only. Map natural language to approvalstatus using this guide:',
     ...APPROVAL_STATUS_GUIDE.map((line) => `  - ${line}`),
     '- For "没审批完/审批中/待审批/还没审批完/not approved yet/pending approval", use approvalstatus = "Wait for Approval".',

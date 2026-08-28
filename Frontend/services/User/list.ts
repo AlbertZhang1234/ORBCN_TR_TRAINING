@@ -7,6 +7,7 @@ export interface UserListRow extends Record<string, unknown> {
   firstname?: string;
   lastname?: string;
   mobile?: string;
+  sap_supplier_id?: string;
 }
 
 export interface UserRoleRow extends Record<string, unknown> {

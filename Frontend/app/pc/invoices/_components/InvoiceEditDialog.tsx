@@ -13,9 +13,16 @@ import {
 import { saveInvoice } from '../../../../services/Invoice/save';
 import type { InvoiceRecord } from '../../../../services/Invoice/_shared';
 import type { InvoiceListRow } from '../../../../services/Invoice/list';
-import { BOOKING_RULE_OPTIONS } from '../../../../services/Invoice/booking-rules';
+import { useBookingRuleOptions } from '../../../../services/Invoice/useBookingRuleOptions';
+import { formatBookingRuleOption } from '../../../../services/Invoice/booking-rules';
+import {
+  BUSINESS_TYPE_OPTIONS,
+  DEFAULT_BUSINESS_TYPE,
+  formatBusinessTypeOption,
+} from '../../../../services/Invoice/business-types';
 import { readStatus } from './shared';
 import { useMessageBox } from '../../_components/useMessageBox';
+import { InvoiceDateField } from './InvoiceDateField';
 
 interface Option {
   value: string;
@@ -29,6 +36,7 @@ interface InvoiceEditDialogProps {
   userOptions: Option[];
   travelOptions: Option[];
   t: (key: string, fallback: string) => string;
+  lang: 'en' | 'zh';
   initialData: InvoiceListRow | null;
 }
 
@@ -39,11 +47,13 @@ export default function InvoiceEditDialog({
   userOptions,
   travelOptions,
   t,
+  lang,
   initialData,
 }: InvoiceEditDialogProps) {
   const { showError, showSuccess, messageBox } = useMessageBox(t);
   const [invoiceNo, setInvoiceNo] = useState('');
   const [userId, setUserId] = useState('');
+  const [businessType, setBusinessType] = useState(DEFAULT_BUSINESS_TYPE);
   const [travelId, setTravelId] = useState('');
   const [invoiceDate, setInvoiceDate] = useState('');
   const [totalNetAmount, setTotalNetAmount] = useState('');
@@ -58,6 +68,7 @@ export default function InvoiceEditDialog({
   const [comment, setComment] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const { options: bookingRuleOptions } = useBookingRuleOptions(bookingCode);
 
   const reportError = (message: string) => {
     setError(message);
@@ -68,6 +79,7 @@ export default function InvoiceEditDialog({
     if (open && initialData) {
       setInvoiceNo(String(initialData.invoiceno ?? ''));
       setUserId(String(initialData.userid ?? ''));
+      setBusinessType(String(initialData.businesstype ?? DEFAULT_BUSINESS_TYPE));
       setTravelId(String(initialData.travelid ?? ''));
       setInvoiceDate(String(initialData.invoicedate ?? ''));
       setTotalNetAmount(
@@ -104,6 +116,7 @@ export default function InvoiceEditDialog({
     const payload: InvoiceRecord = {
       invoiceno: invoiceNo.trim(),
       userid: userId.trim(),
+      businesstype: businessType,
     };
     if (travelId.trim()) {
       payload.travelid = travelId.trim();
@@ -123,7 +136,7 @@ export default function InvoiceEditDialog({
     if (bookingCode.trim()) {
       payload.bookingcode = bookingCode.trim();
     }
-    payload.currency = currency.trim() || 'CNY';
+    payload.currency = currency.trim().toUpperCase() || 'CNY';
     if (originalAmount.trim()) {
       payload.originalamount = Number(originalAmount);
     }
@@ -182,6 +195,20 @@ export default function InvoiceEditDialog({
             ))}
           </TextField>
           <TextField
+            label={t('business_type', 'Business Type')}
+            value={businessType}
+            onChange={(e) => setBusinessType(e.target.value)}
+            fullWidth
+            select
+            required
+          >
+            {BUSINESS_TYPE_OPTIONS.map((option) => (
+              <MenuItem key={option.code} value={option.code}>
+                {formatBusinessTypeOption(option, t)}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
             label={t('travel_id', 'Travel ID')}
             value={travelId}
             onChange={(e) => setTravelId(e.target.value)}
@@ -197,13 +224,11 @@ export default function InvoiceEditDialog({
               </MenuItem>
             ))}
           </TextField>
-          <TextField
+          <InvoiceDateField
             label={t('invoice_date', 'Invoice Date')}
-            type="date"
             value={invoiceDate}
-            onChange={(e) => setInvoiceDate(e.target.value)}
-            fullWidth
-            InputLabelProps={{ shrink: true }}
+            onChange={setInvoiceDate}
+            lang={lang}
           />
           <TextField
             label={t('net_amount', 'Net Amount')}
@@ -214,7 +239,7 @@ export default function InvoiceEditDialog({
             inputProps={{ step: '0.01' }}
           />
           <TextField
-            label="Tax Amount"
+            label={t('tax_amount', 'Tax Amount')}
             type="number"
             value={taxAmount}
             onChange={(e) => setTaxAmount(e.target.value)}
@@ -222,7 +247,7 @@ export default function InvoiceEditDialog({
             inputProps={{ step: '0.01' }}
           />
           <TextField
-            label="Gross Amount"
+            label={t('gross_amount', 'Gross Amount')}
             type="number"
             value={grossAmount}
             onChange={(e) => setGrossAmount(e.target.value)}
@@ -230,37 +255,37 @@ export default function InvoiceEditDialog({
             inputProps={{ step: '0.01' }}
           />
           <TextField
-            label="Booking Rule"
+            label={t('booking_rule', 'Booking Rule')}
             value={bookingCode}
             onChange={(e) => setBookingCode(e.target.value)}
             fullWidth
             select
           >
-            <MenuItem value="">(None)</MenuItem>
-            {BOOKING_RULE_OPTIONS.map((option) => (
+            <MenuItem value="">{t('none', '(None)')}</MenuItem>
+            {bookingRuleOptions.map((option) => (
               <MenuItem key={option.code} value={option.code}>
-                {option.label}
+                {formatBookingRuleOption(option, lang)}
               </MenuItem>
             ))}
           </TextField>
           <TextField
-            label="Description"
+            label={t('description', 'Description')}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             fullWidth
           />
           <TextField
-            label="Comment"
+            label={t('comment', 'Comment')}
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             fullWidth
           />
           <TextField
-            label="Currency"
+            label={t('currency', 'Currency')}
             value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
+            onChange={(e) => setCurrency(e.target.value.toUpperCase())}
             fullWidth
-            helperText="本币/入账币种，保存时默认使用 CNY"
+            helperText={t('invoice_currency_hint', 'Target currency for saving. Different original currencies are converted using the exchange rate.')}
           />
           <TextField
             label={t('original_amount', 'Original Amount')}
@@ -275,17 +300,17 @@ export default function InvoiceEditDialog({
             value={originalCurrency}
             onChange={(e) => setOriginalCurrency(e.target.value.toUpperCase())}
             fullWidth
-            helperText="票据原始币种，例如 CNY/EUR/USD/JPY"
+            helperText={t('original_currency_hint', 'Original currency shown on the invoice, for example CNY/EUR/USD/JPY')}
           />
-          <TextField label="Status" value={status} onChange={(e) => setStatus(e.target.value)} fullWidth />
+          <TextField label={t('status', 'Status')} value={status} onChange={(e) => setStatus(e.target.value)} fullWidth />
         </Box>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={saving}>
-          取消
+          {t('cancel', 'Cancel')}
         </Button>
         <Button onClick={handleSave} variant="contained" disabled={saving}>
-          保存
+          {t('save', 'Save')}
         </Button>
       </DialogActions>
       {messageBox}

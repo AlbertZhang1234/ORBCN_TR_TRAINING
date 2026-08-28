@@ -20,6 +20,7 @@ export interface InvoiceRecord extends Record<string, unknown> {
   taxamount?: number;
   grossamount?: number;
   bookingcode?: string;
+  businesstype?: string;
   currency?: string;
   originalamount?: number;
   originalcurrency?: string;

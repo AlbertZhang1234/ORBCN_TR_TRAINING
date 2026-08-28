@@ -9,6 +9,7 @@ export interface UserRecord extends Record<string, unknown> {
   lastname: string;
   password: string;
   mobile?: string;
+  sap_supplier_id?: string;
 }
 
 export async function createUser(user: UserRecord): Promise<UserRecord> {
@@ -20,6 +21,9 @@ export async function createUser(user: UserRecord): Promise<UserRecord> {
   }
   if (!user.password?.trim()) {
     throw new ServiceError('password is required');
+  }
+  if (user.sap_supplier_id && user.sap_supplier_id.trim().length > 10) {
+    throw new ServiceError('SAP Supplier ID must not exceed 10 characters');
   }
 
   const rows = await insertRows<UserRecord>(TABLES.user, user);

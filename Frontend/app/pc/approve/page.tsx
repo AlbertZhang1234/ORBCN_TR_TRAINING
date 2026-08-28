@@ -26,6 +26,7 @@ import type { VariantMetadata } from '@/components/Molecules/CVariantManagement'
 import { normalizeWorkflowStatus } from '../../../services/_core/locks';
 import { listInvoices, type InvoiceListRow } from '../../../services/Invoice/list';
 import { listTravelEntries, type TravelEntryListRow } from '../../../services/TravelEntry/list';
+import { PcContentLayout } from '../_components/PcContentLayout';
 
 interface ApprovalHeaderRow extends ReimbursementListRow {
   _key: string;
@@ -473,15 +474,7 @@ export default function ApprovePage() {
   const tableBusy = loading || dialogSaving;
 
   return (
-    <CAppPageLayout
-      appTitle={t('approve', 'Approval')}
-      menuData={menuData}
-      logo={<HeaderLogo />}
-      user={headerUser}
-      locale={lang}
-      onLocaleChange={(l) => changeLanguage(l as any)}
-      localeOptions={['en', 'zh']}
-      onUserLogout={() => void performClientLogout({ router, replace: true })}
+    <PcContentLayout
       contentSx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
     >
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -520,6 +513,6 @@ export default function ApprovePage() {
             onLayoutSave: handleSaveLayout,
           }}
         />
-    </CAppPageLayout>
+    </PcContentLayout>
   );
 }

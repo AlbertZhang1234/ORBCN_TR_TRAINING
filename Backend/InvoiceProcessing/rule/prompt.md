@@ -3,35 +3,7 @@
 2. **智能分类**：根据发票内容（特别是商品/服务名称、销售方行业属性），将发票归类到下述标准类别中。
 3. **原始币种识别**：必须识别票据原始币种，并用 ISO 4217 三位代码输出到 `currency` 字段，例如 `CNY`、`EUR`、`USD`、`JPY`。
 
-### 1. 发票分类标准 (Category Codes)
-
-**交通出行 (Traffic & Transport)**
-- **PARK**: 停车费 (Parking, Garage, Car storage)
-- **TAXI**: 打车/出租车/网约车/客运服务费 (Taxi, Didi, Uber, Ride-hailing)
-- **AUTG**: 过路过桥费 (Highway tolls, Bridge fees, ETC)
-- **BENL**: 加油/燃油费 (Petrol, Gasoline, Diesel, Fuel)
-- **BAHC**: 火车/高铁/动车票 (Train, High-speed rail, Railway)
-- **FAHR**: 公交/地铁/轮渡 (Bus, Subway, Ferry, Public transit)
-- **FLUG**: 机票/航空行程单/机票代理费/燃油附加费 (Flight, Air ticket, Agency fee)
-- **MTWG**: 租车费/经营租赁/车辆租赁 (Car rental, Vehicle leasing, Car hire) - *注意：不是停车*
-
-**餐饮住宿 (Travel & Living)**
-- **HOTL**: 酒店住宿 (Hotel, Accommodation, Lodging, Inn)
-- **BEWI**: 餐饮/客饭 (Restaurant, Dining, Meals, Food)
-- **PRIU**: 私人住宿补贴 (Private overnight allowance) - *较少见*
-
-**办公与杂项 (Office & Misc)**
-- **KOIN**: 通信/话费 (Communication, Phone bill, Internet)
-- **POST**: 快递/物流 (Express, Post, Courier, Logistics)
-- **PCKL**: 电脑配件/电子耗材 (Computer accessories, Cables, Adapters)
-- **BUCH**: 图书资料 (Books, Publications)
-- **BURO**: 办公用品 (Office supplies, Stationery, Paper)
-- **SCHU**: 培训/教育 (Training, Education, Tuition)
-- **GE75**: 礼品 (Gifts)
-- **REST**: 其他工作餐/晚餐 (Other meals/Dinner)
-
-**兜底分类**
-- **SOBE**: 其他/无法识别 (Others / Unclassified)
+记账规则代码、分类说明和关键词由系统从记账规则主数据表动态附加。只能使用请求中提供的有效规则代码。
 
 ### 2. 提取与处理原则
 - **日期标准化**：统一为 `YYYY-MM-DD` 格式。

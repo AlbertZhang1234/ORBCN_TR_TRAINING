@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from service.classifier import process_invoice, load_prompt
@@ -68,7 +69,10 @@ def health() -> dict[str, str]:
 
 
 @app.post("/api/v1/invoice/classify", response_model=ClassifyResponse)
-async def classify_invoice_endpoint(file: UploadFile = File(...)) -> ClassifyResponse:
+async def classify_invoice_endpoint(
+    file: UploadFile = File(...),
+    booking_rules: str = Form(...),
+) -> ClassifyResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="filename is required")
 
@@ -84,6 +88,13 @@ async def classify_invoice_endpoint(file: UploadFile = File(...)) -> ClassifyRes
     if len(data) > max_size:
         raise HTTPException(status_code=413, detail=f"file too large, max {settings.max_upload_size_mb}MB")
 
+    try:
+        parsed_booking_rules = json.loads(booking_rules)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="booking_rules must be valid JSON") from exc
+    if not isinstance(parsed_booking_rules, list) or not parsed_booking_rules:
+        raise HTTPException(status_code=400, detail="booking_rules must contain active rules")
+
     prompt_content = load_prompt(settings.prompt_path)
     result = process_invoice(
         file_bytes=data,
@@ -93,6 +104,7 @@ async def classify_invoice_endpoint(file: UploadFile = File(...)) -> ClassifyRes
         temperature=settings.llm_temperature,
         base_url=settings.llm_base_url,
         api_key=settings.llm_api_key,
+        booking_rules=parsed_booking_rules,
     )
     
     # Determine engine based on result

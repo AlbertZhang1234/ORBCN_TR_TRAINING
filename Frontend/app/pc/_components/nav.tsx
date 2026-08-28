@@ -15,6 +15,7 @@ import HowToRegRoundedIcon from '@mui/icons-material/HowToRegRounded';
 import AccountBalanceRoundedIcon from '@mui/icons-material/AccountBalanceRounded';
 import TaskAltRoundedIcon from '@mui/icons-material/TaskAltRounded';
 import PivotTableChartRoundedIcon from '@mui/icons-material/PivotTableChartRounded';
+import RuleRoundedIcon from '@mui/icons-material/RuleRounded';
 import { useTheme } from '@mui/material';
 import type { TreeMenuItem } from 'orbcafe-ui';
 import { getSessionUser } from './session';
@@ -68,24 +69,34 @@ export function buildPcMenuData(t: Translate) {
     });
   }
 
+  const masterDataChildren: TreeMenuItem[] = [
+    {
+      id: 'customers',
+      title: t('customers', 'Customer Management'),
+      href: '/pc/customers',
+      icon: <BusinessRoundedIcon fontSize="small" />,
+    },
+    {
+      id: 'projects',
+      title: t('projects', 'Project Management'),
+      href: '/pc/projects',
+      icon: <AssignmentRoundedIcon fontSize="small" />,
+    },
+  ];
+  if (isAdmin) {
+    masterDataChildren.push({
+      id: 'booking_rules',
+      title: t('booking_rules', 'Booking Rules'),
+      href: '/pc/booking-rules',
+      icon: <RuleRoundedIcon fontSize="small" />,
+    });
+  }
+
   menus.push({
     id: 'master_data',
     title: t('master_data', 'Master Data Maintenance'),
     icon: <DatasetRoundedIcon fontSize="small" />,
-    children: [
-      {
-        id: 'customers',
-        title: t('customers', 'Customer Management'),
-        href: '/pc/customers',
-        icon: <BusinessRoundedIcon fontSize="small" />,
-      },
-      {
-        id: 'projects',
-        title: t('projects', 'Project Management'),
-        href: '/pc/projects',
-        icon: <AssignmentRoundedIcon fontSize="small" />,
-      },
-    ],
+    children: masterDataChildren,
   });
 
   const reimbursementChildren: TreeMenuItem[] = [

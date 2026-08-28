@@ -20,7 +20,13 @@ import { saveInvoice } from '../../../../services/Invoice/save';
 import { saveInvoiceSourceFile } from '../../../../services/Invoice/source';
 import type { InvoiceRecord } from '../../../../services/Invoice/_shared';
 import { listInvoices } from '../../../../services/Invoice/list';
-import { BOOKING_RULE_OPTIONS } from '../../../../services/Invoice/booking-rules';
+import { useBookingRuleOptions } from '../../../../services/Invoice/useBookingRuleOptions';
+import { formatBookingRuleOption } from '../../../../services/Invoice/booking-rules';
+import {
+  BUSINESS_TYPE_OPTIONS,
+  DEFAULT_BUSINESS_TYPE,
+  formatBusinessTypeOption,
+} from '../../../../services/Invoice/business-types';
 import { normalizeWorkflowStatus } from '../../../../services/_core/locks';
 import {
   type ImportInvoiceDraft,
@@ -44,6 +50,7 @@ interface InvoiceImportDialogProps {
   userOptions: Option[];
   travelOptions: Option[];
   t: (key: string, fallback: string) => string;
+  lang: 'en' | 'zh';
   defaultUserId?: string;
   existingInvoiceNoSet: Set<string>;
 }
@@ -62,6 +69,7 @@ export default function InvoiceImportDialog({
   userOptions,
   travelOptions,
   t,
+  lang,
   defaultUserId = '',
   existingInvoiceNoSet,
 }: InvoiceImportDialogProps) {
@@ -69,12 +77,14 @@ export default function InvoiceImportDialog({
   const { showError, showSuccess, showWarning, showInfo, messageBox } = useMessageBox(t);
   const [importRows, setImportRows] = useState<ImportInvoiceDraft[]>([]);
   const [importUserId, setImportUserId] = useState(defaultUserId);
+  const [businessType, setBusinessType] = useState(DEFAULT_BUSINESS_TYPE);
   const [importTravelId, setImportTravelId] = useState('');
   const [importDragActive, setImportDragActive] = useState(false);
   const [importMessage, setImportMessage] = useState('');
   const [importParsing, setImportParsing] = useState(false);
   const [savingImport, setSavingImport] = useState(false);
   const [error, setError] = useState('');
+  const { options: bookingRuleOptions } = useBookingRuleOptions();
 
   // Reset when dialog opens
   useEffect(() => {
@@ -82,6 +92,7 @@ export default function InvoiceImportDialog({
       setImportRows([]);
       setImportMessage('');
       setImportUserId(defaultUserId);
+      setBusinessType(DEFAULT_BUSINESS_TYPE);
       setImportTravelId('');
       setImportDragActive(false);
       setError('');
@@ -105,6 +116,7 @@ export default function InvoiceImportDialog({
     const payload: InvoiceRecord = {
       invoiceno: toTrimmedString(parsed?.invoice_number),
       userid: importUserId.trim(),
+      businesstype: businessType,
       invoicedate: toTrimmedString(parsed?.issue_date),
       totalnetamount: toNumberOrUndefined(parsed?.amount_excl_tax),
       taxamount: toNumberOrUndefined(parsed?.tax_amount),
@@ -113,7 +125,7 @@ export default function InvoiceImportDialog({
       supplier: toTrimmedString(parsed?.seller_name || parsed?.buyer_name),
       description: '',
       comment: toTrimmedString(parsed?.remark),
-      currency: 'CNY',
+      currency: originalCurrency,
       originalcurrency: originalCurrency,
       originalamount: originalAmount,
       status: 'open',
@@ -330,6 +342,7 @@ export default function InvoiceImportDialog({
           const nextPayload: InvoiceRecord = {
             ...row.payload,
             userid: importUserId.trim(),
+            businesstype: businessType,
             status: 'open',
           };
           const travel = importTravelId.trim();
@@ -357,6 +370,7 @@ export default function InvoiceImportDialog({
     // The original code re-normalized on EVERY render if dependencies changed?
     // No, `useEffect` runs when deps change.
     importUserId,
+    businessType,
     importTravelId,
     existingInvoiceNoSet,
     t,
@@ -455,20 +469,36 @@ export default function InvoiceImportDialog({
                 },
               }}
             >
-              <MenuItem value="">(None)</MenuItem>
-              {BOOKING_RULE_OPTIONS.map((option) => (
+              <MenuItem value="">{t('none', '(None)')}</MenuItem>
+              {bookingRuleOptions.map((option) => (
                 <MenuItem key={option.code} value={option.code}>
-                  {option.label}
+                  {formatBookingRuleOption(option, lang)}
                 </MenuItem>
               ))}
             </TextField>
           ),
+          businesstype: cell(row.payload.businesstype),
           userid: cell(row.payload.userid),
           travelid: cell(row.payload.travelid),
           invoicedate: cell(row.payload.invoicedate),
           totalnetamount: cell(row.payload.totalnetamount),
           taxamount: cell(row.payload.taxamount),
           grossamount: cell(row.payload.grossamount),
+          currency: (
+            <TextField
+              value={toInputString(row.payload.currency).toUpperCase()}
+              onChange={(event) =>
+                updateImportDraftPayload(row.id, { currency: event.target.value.toUpperCase() })
+              }
+              size="small"
+              fullWidth
+              disabled={importParsing || savingImport}
+              sx={{
+                minWidth: 120,
+                '& .MuiInputBase-input': { fontSize: '0.82rem', py: 0.8 },
+              }}
+            />
+          ),
           originalamount: cell(row.payload.originalamount),
           supplier: cell(row.payload.supplier),
           comment: cell(row.payload.comment),
@@ -476,10 +506,10 @@ export default function InvoiceImportDialog({
           status: cell(row.payload.status),
           checkResult: row.skipReason
             ? <Typography component="span" sx={{ color: 'error.main', fontWeight: 700, fontSize: '0.82rem' }}>{row.skipReason}</Typography>
-            : <Typography component="span" sx={{ color: 'success.main', fontWeight: 700, fontSize: '0.82rem' }}>可保存</Typography>,
+            : <Typography component="span" sx={{ color: 'success.main', fontWeight: 700, fontSize: '0.82rem' }}>{t('ready_to_save', 'Ready to save')}</Typography>,
         };
       }),
-    [importRows, importParsing, savingImport, updateImportDraftPayload],
+    [importRows, importParsing, savingImport, updateImportDraftPayload, bookingRuleOptions, lang, t],
   );
 
   const importColumns = useMemo<any[]>(
@@ -488,6 +518,7 @@ export default function InvoiceImportDialog({
       { id: 'invoiceno', label: t('invoice_no', 'Invoice No'), minWidth: 170 },
       { id: 'description', label: `${t('description', 'Description')} *`, minWidth: 220 },
       { id: 'bookingcode', label: t('booking_rule', 'Booking Rule'), minWidth: 180 },
+      { id: 'businesstype', label: t('business_type', 'Business Type'), minWidth: 150 },
       { id: 'userid', label: t('user_id', 'User ID'), minWidth: 140 },
       { id: 'travelid', label: t('travel_id', 'Travel ID'), minWidth: 140 },
       { id: 'invoicedate', label: t('invoice_date', 'Invoice Date'), minWidth: 130 },
@@ -496,6 +527,7 @@ export default function InvoiceImportDialog({
       { id: 'grossamount', label: t('gross_amount', 'Gross Amount'), minWidth: 120 },
       { id: 'originalamount', label: t('original_amount', 'Original Amount'), minWidth: 130 },
       { id: 'originalcurrency', label: t('original_currency', 'Original Currency'), minWidth: 130 },
+      { id: 'currency', label: t('save_currency', 'Save Currency'), minWidth: 130 },
       { id: 'supplier', label: t('supplier', 'Supplier'), minWidth: 180 },
       { id: 'comment', label: t('comment', 'Comment'), minWidth: 180 },
       {
@@ -522,7 +554,7 @@ export default function InvoiceImportDialog({
         },
       }}
     >
-      <DialogTitle>批量导入发票（PDF/图片）</DialogTitle>
+      <DialogTitle>{t('import_invoices_title', 'Bulk Import Invoices (PDF/Images)')}</DialogTitle>
       <DialogContent sx={{ pt: 1, display: 'flex', flexDirection: 'column' }}>
         <Stack spacing={2} sx={{ mt: 1, flex: 1, minHeight: 0 }}>
           <Box
@@ -539,7 +571,7 @@ export default function InvoiceImportDialog({
           >
             <Stack spacing={1.5}>
               <Button component="label" variant="outlined" startIcon={<UploadFileRoundedIcon />} disabled={importParsing || savingImport}>
-                选择发票文件（可多选）
+                {t('choose_invoice_files', 'Choose Invoice Files (Multiple)')}
                 <input
                   hidden
                   type="file"
@@ -549,16 +581,16 @@ export default function InvoiceImportDialog({
                 />
               </Button>
               <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
-                支持拖拽 PDF 或图片文件到此区域；系统将调用 InvoiceProcessing 服务提取信息。
+                {t('import_files_hint', 'Drag PDF or image files here. The system uses InvoiceProcessing to extract information.')}
               </Typography>
               <TextField
-                label="User ID"
+                label={t('user_id', 'User ID')}
                 value={importUserId}
                 onChange={(e) => setImportUserId(e.target.value)}
                 fullWidth
                 select
                 disabled={userOptions.length === 0 || importParsing || savingImport}
-                helperText={userOptions.length === 0 ? '暂无可选用户，请先创建用户' : '将应用到本次导入所有发票'}
+                helperText={userOptions.length === 0 ? t('no_users_available', 'No users available, please create a user first') : t('apply_to_all_imported_invoices', 'Applied to all imported invoices')}
               >
                 {userOptions.map((option) => (
                   <MenuItem key={option.value} value={option.value}>
@@ -567,15 +599,31 @@ export default function InvoiceImportDialog({
                 ))}
               </TextField>
               <TextField
-                label="Travel ID"
+                label={t('business_type', 'Business Type')}
+                value={businessType}
+                onChange={(e) => setBusinessType(e.target.value)}
+                fullWidth
+                select
+                required
+                disabled={importParsing || savingImport}
+                helperText={t('apply_to_all_imported_invoices', 'Applied to all imported invoices')}
+              >
+                {BUSINESS_TYPE_OPTIONS.map((option) => (
+                  <MenuItem key={option.code} value={option.code}>
+                    {formatBusinessTypeOption(option, t)}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                label={t('travel_id', 'Travel ID')}
                 value={importTravelId}
                 onChange={(e) => setImportTravelId(e.target.value)}
                 fullWidth
                 select
                 disabled={travelOptions.length === 0 || importParsing || savingImport}
-                helperText={travelOptions.length === 0 ? '暂无可选差旅，可留空导入' : '可选，应用到所有导入发票'}
+                helperText={travelOptions.length === 0 ? t('no_travel_available_import', 'No travel entries are available. You may import without one.') : t('optional_apply_to_all_imported_invoices', 'Optional. Applied to all imported invoices.')}
               >
-                <MenuItem value="">(None)</MenuItem>
+                <MenuItem value="">{t('none', '(None)')}</MenuItem>
                 {travelOptions.map((option) => (
                   <MenuItem key={option.value} value={option.value}>
                     {option.label}
@@ -584,12 +632,15 @@ export default function InvoiceImportDialog({
               </TextField>
             </Stack>
             <Typography sx={{ mt: 1.2, fontSize: 13, color: 'text.secondary' }}>
-              上方上传文件，系统将调用 InvoiceProcessing 服务提取信息；下方红色记录将被保存时自动跳过。
+              {t('import_skippable_rows_hint', 'Upload files above. The system extracts information with InvoiceProcessing; red rows are skipped during saving.')}
             </Typography>
           </Box>
 
           <Alert severity="info">
-            共 {importStats.total} 条，待保存 {importStats.savable} 条，跳过 {importStats.skipped} 条
+            {t('import_stats', 'Total {0}; ready to save {1}; skipped {2}')
+              .replace('{0}', String(importStats.total))
+              .replace('{1}', String(importStats.savable))
+              .replace('{2}', String(importStats.skipped))}
             {importMessage ? `；${importMessage}` : ''}
           </Alert>
 
@@ -597,7 +648,7 @@ export default function InvoiceImportDialog({
             <BusyTable
               appId="pc-invoices"
               busy={importParsing || savingImport}
-              title="Import Preview"
+              title={t('import_preview', 'Import Preview')}
               columns={importColumns}
               rows={importTableRows}
               rowKey="id"
@@ -610,7 +661,7 @@ export default function InvoiceImportDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={closeImportDialog} disabled={importParsing || savingImport}>
-          关闭
+          {t('close', 'Close')}
         </Button>
         <Button onClick={() => void saveImportedInvoices('saveOnly')} variant="contained" disabled={importParsing || savingImport}>
           {t('save_invoices_only', 'Save Invoices Only')}

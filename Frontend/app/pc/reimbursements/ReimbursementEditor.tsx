@@ -19,7 +19,11 @@ import { usePcI18n } from '../_components/PcI18nProvider';
 import { createTravelReimbursement } from '../../../services/TravelReimbursement/create';
 import { changeTravelReimbursement } from '../../../services/TravelReimbursement/change';
 import { listReimbursementLines, type ReimbursementListRow } from '../../../services/TravelReimbursement/list';
-import { normalizeChargeableFlag, normalizeLineAmount } from '../../../services/TravelReimbursement/_shared';
+import {
+  normalizeChargeableFlag,
+  normalizeLineAmount,
+  assertInvoiceSaveCurrencyConsistency,
+} from '../../../services/TravelReimbursement/_shared';
 import type { ProjectListRow } from '../../../services/Projects/list';
 import type { TravelEntryListRow } from '../../../services/TravelEntry/list';
 import type { InvoiceListRow } from '../../../services/Invoice/list';
@@ -410,14 +414,15 @@ export default function ReimbursementEditor({
       reportError(t('please_select_at_least_one_invoice', 'Please select at least one invoice'));
       return;
     }
-    const selectedCurrencies = new Set(
-      selectedInvoiceNos.map((invoiceNo) => readInvoiceOriginalCurrency(allInvoiceMap.get(invoiceNo))),
-    );
-    if (selectedCurrencies.size > 1) {
+    try {
+      assertInvoiceSaveCurrencyConsistency(
+        selectedInvoiceNos.map((invoiceNo) => allInvoiceMap.get(invoiceNo) ?? {}),
+      );
+    } catch {
       reportError(
         t(
-          'mixed_original_currency_not_allowed',
-          'Invoices with different original currencies cannot be submitted in one reimbursement.',
+          'mixed_save_currency_not_allowed',
+          'Invoices with different save currencies cannot be submitted in one reimbursement.',
         ),
       );
       return;

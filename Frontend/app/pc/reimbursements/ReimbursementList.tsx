@@ -5,6 +5,7 @@ import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
 import TaskAltRoundedIcon from '@mui/icons-material/TaskAltRounded';
 import FactCheckRoundedIcon from '@mui/icons-material/FactCheckRounded';
+import SyncAltRoundedIcon from '@mui/icons-material/SyncAltRounded';
 import TableViewRoundedIcon from '@mui/icons-material/TableViewRounded';
 import type { FilterField, FilterValue } from '@/components/Structures/CSmartFilter';
 import type { TableLayout } from '@/components/Structures/CTable/types';
@@ -24,7 +25,14 @@ import {
 } from './helpers';
 import { normalizeWorkflowStatus } from '../../../services/_core/locks';
 
-function statusLabel(status: ReturnType<typeof normalizeWorkflowStatus>, t: (key: string, fallback: string) => string): string {
+function statusLabel(
+  status: ReturnType<typeof normalizeWorkflowStatus>,
+  t: (key: string, fallback: string) => string,
+  rawStatus?: string,
+): string {
+  if (String(rawStatus ?? '').trim() === '已回传SAP系统') {
+    return t('booking_status_sap_posted', '已回传SAP系统');
+  }
   if (status === 'WAIT FOR APPROVAL') {
     return t('stat_wait_approval', 'Waiting');
   }
@@ -147,6 +155,7 @@ interface ReimbursementListProps {
   t: (key: string, defaultVal: string) => string;
   showManageActions?: boolean;
   onBook?: () => void;
+  onSapBook?: () => void;
   onExport?: () => void;
   selectionMode?: 'single' | 'multiple';
   pageTitle?: string;
@@ -169,6 +178,7 @@ export default function ReimbursementList({
   t,
   showManageActions = true,
   onBook,
+  onSapBook,
   onExport,
   selectionMode = 'single',
   pageTitle,
@@ -273,7 +283,7 @@ export default function ReimbursementList({
           type: 'multi-select',
           options: buildOptions(
             rows.map((row) => String(readBookingStatus(row)).trim()),
-            (value) => statusLabel(normalizeWorkflowStatus(value), t),
+            (value) => statusLabel(normalizeWorkflowStatus(value), t, value),
           ),
         },
         {
@@ -415,7 +425,7 @@ export default function ReimbursementList({
         id: '_bookingstatus',
         label: t('booking_status', 'Booking Status'),
         minWidth: 140,
-        render: (value: string) => statusLabel(normalizeWorkflowStatus(value), t),
+        render: (value: string) => statusLabel(normalizeWorkflowStatus(value), t, value),
       },
       {
         id: '_approvalstatus',
@@ -467,10 +477,27 @@ export default function ReimbursementList({
   );
 
   const bookAction = (
-    <Tooltip key="book" title={selected.length > 0 ? t('book_reimbursement', 'Book Reimbursement') : t('please_select', 'Please select')}>
+    <Tooltip key="book" title={selected.length > 0 ? t('book_reimbursement', 'Book Reimbursement') : t('please_select_row', 'Please select a row')}>
       <span>
         <IconButton onClick={onBook} disabled={selected.length === 0} aria-label={t('book_reimbursement', 'Book Reimbursement')}>
           <FactCheckRoundedIcon />
+        </IconButton>
+      </span>
+    </Tooltip>
+  );
+
+  const sapBookAction = (
+    <Tooltip
+      key="sap-book"
+      title={selected.length > 0 ? t('book_reimbursement_sap', 'Book Reimbursement (Return to SAP)') : t('please_select_row', 'Please select a row')}
+    >
+      <span>
+        <IconButton
+          onClick={onSapBook}
+          disabled={selected.length === 0}
+          aria-label={t('book_reimbursement_sap', 'Book Reimbursement (Return to SAP)')}
+        >
+          <SyncAltRoundedIcon />
         </IconButton>
       </span>
     </Tooltip>
@@ -489,6 +516,7 @@ export default function ReimbursementList({
   const actions = [
     ...(showManageActions ? [createAction, editAction, deleteAction, approveAction] : []),
     ...(onBook ? [bookAction] : []),
+    ...(onSapBook ? [sapBookAction] : []),
     ...(onExport ? [exportAction] : []),
   ];
 

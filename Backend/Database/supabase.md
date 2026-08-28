@@ -44,12 +44,24 @@ Table:
 - `taxamount` (numeric): 税额
 - `grossamount` (numeric): 总额
 - `bookingcode` (string): 记账代码
+- `businesstype` (string): 业务类型，`01` 标准采购发票、`02` 运费/后续借记、`03` 对公费用，默认 `03`
 - `currency` (string): 本币/入账币种，默认 `CNY`
 - `originalamount` (numeric): 票据原始币种含税金额
 - `originalcurrency` (string): 票据原始币种，ISO 4217 三位代码
 - `status` (string): 状态
 - `comment` (string): 备注
 - `description` (string): 描述
+
+### otto_booking_rule (记账规则主数据)
+- `code` (PK, string): 记账规则代码
+- `category` (string): 规则类别
+- `name_zh` / `name_en` (string): 中英文名称
+- `description` (string): 分类说明
+- `keywords` (jsonb): AI 分类关键词和别名
+- `costcenter` (string): 成本中心
+- `accountingsubject` (string): 会计科目
+- `sort_order` (integer): 显示顺序
+- `is_active` (boolean): 是否启用
 
 ### otto_tr_h (报销单抬头)
 - `id` (PK, bigint): 报销单编号
@@ -63,6 +75,7 @@ Table:
 ### otto_tr_t (报销单行明细)
 - `id` (PK, bigint): 报销单编号
 - `invoiceno` (PK, string): 发票编号
+- `seqno` (integer): 报销单行项目号，同一报销单内从 1 开始连续编号
 - `tr_amount`（string）；报销金额
 - `trchargeable` (boolean): 差旅是否收费
 - `txchargeable` (boolean): 补贴是否收费
@@ -74,6 +87,7 @@ Table:
 - `lastname` (string): 姓
 - `mobile` (string): 手机号
 - `password` (string): 密码
+- `sap_supplier_id` (VARCHAR(10), nullable): SAP Supplier ID
 
 ### otto_role (角色表)
 - `roleid` (PK, string): 角色编号

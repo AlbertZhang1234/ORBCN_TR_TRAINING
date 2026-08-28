@@ -19,6 +19,8 @@ import { buildPcMenuData, HeaderLogo } from '../_components/nav';
 import { performClientLogout } from '../../../services/Auth/logoutClient';
 import { listTravelReportRows, type TravelReportRow } from '../../../services/TravelReport/list';
 import type { TrReportAiPlan, TrReportAiStage } from '../../../services/TravelReport/pivotAi';
+import { PcContentLayout } from '../_components/PcContentLayout';
+import { usePcHeaderSearch } from '../_components/PcAppShell';
 
 const PRESET_STORAGE_KEY = 'pc_tr_report_pivot_presets_v1';
 const AI_WORKFLOW_STAGES: TrReportAiStage[] = ['question_understanding', 'tool_analysis', 'tool_execution'];
@@ -533,21 +535,14 @@ export default function TRReportPage() {
     }
   };
 
+  usePcHeaderSearch((value) => void submitAiQuery(value));
+
   if (!sessionUser) {
     return null;
   }
 
   return (
-    <CAppPageLayout
-      appTitle={t('tr_report_title', 'TRReport - Reimbursement Pivot')}
-      menuData={menuData}
-      logo={<HeaderLogo />}
-      user={headerUser}
-      locale={lang}
-      onLocaleChange={(l) => changeLanguage(l as any)}
-      localeOptions={['en', 'zh']}
-      onSearch={(value) => void submitAiQuery(value)}
-      onUserLogout={() => void performClientLogout({ router, replace: true })}
+    <PcContentLayout
       contentSx={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}
     >
       <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, width: '100%', height: '100%', minHeight: 0 }}>
@@ -692,6 +687,6 @@ export default function TRReportPage() {
           </>
         )}
       </Box>
-    </CAppPageLayout>
+    </PcContentLayout>
   );
 }

@@ -20,10 +20,12 @@ import {
 } from '../../../services/TravelReimbursement/list';
 import { listProjects, type ProjectListRow } from '../../../services/Projects/list';
 import { bookingInvoices } from '../../../services/Invoice/booking';
+import { postReimbursementsToSap } from '../../../services/TravelReimbursement/sapPosting';
 import { listTravelReportRows } from '../../../services/TravelReport/list';
 import { groupReportRowsToReimbursements } from '../reimbursements/reportView';
 import { openReimbursementDetail, toFilter } from './helpers';
 import ReimbursementList from './ReimbursementList';
+import { PcContentLayout } from '../_components/PcContentLayout';
 
 export default function TRBookingPage() {
   const router = useRouter();
@@ -142,6 +144,51 @@ export default function TRBookingPage() {
     }
   };
 
+  const postSelectedToSap = async () => {
+    const targets = getSelectedRows();
+    if (targets.length === 0) {
+      reportError(t('please_select_row', 'Please select a row'));
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const result = await postReimbursementsToSap(
+        targets.map(toFilter),
+        lang,
+      );
+      await load();
+      if (result.success) {
+        showSuccess(
+          t('reimbursement_sap_posted_success', 'Reimbursements posted to SAP successfully'),
+        );
+        setSelected([]);
+        return;
+      }
+
+      const failures = result.items
+        .filter((item) => !item.success)
+        .slice(0, 3)
+        .map(
+          (item) =>
+            `${item.reimbursementNo} (${item.postedLines}/${item.totalLines}): ${item.message ?? 'SAP posting failed'}`,
+        );
+      reportError(
+        failures.join(' | ') ||
+          t('failed_post_reimbursement_sap', 'Failed to post reimbursements to SAP'),
+      );
+    } catch (err) {
+      reportError(
+        err instanceof Error
+          ? err.message
+          : t('failed_post_reimbursement_sap', 'Failed to post reimbursements to SAP'),
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const openDetail = (row: ReimbursementListRow) => {
     openReimbursementDetail(row, router, {
       invalidMessage: t('invalid_reimbursement', 'Invalid reimbursement record'),
@@ -171,15 +218,7 @@ export default function TRBookingPage() {
   }
 
   return (
-    <CAppPageLayout
-      appTitle={t('tr_booking_title', 'TR Booking & Archive')}
-      menuData={menuData}
-      logo={<HeaderLogo />}
-      user={headerUser}
-      locale={lang}
-      onLocaleChange={(l) => changeLanguage(l as any)}
-      localeOptions={['en', 'zh']}
-      onUserLogout={() => void performClientLogout({ router, replace: true })}
+    <PcContentLayout
       contentSx={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}
     >
       <Box sx={{ position: 'relative', width: '100%', flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -196,6 +235,7 @@ export default function TRBookingPage() {
                 selected={selected}
                 onSelectionChange={setSelected}
                 onBook={bookSelected}
+                onSapBook={postSelectedToSap}
                 onDetail={openDetail}
                 t={t}
               />
@@ -204,6 +244,6 @@ export default function TRBookingPage() {
         </Box>
       </Box>
       {messageBox}
-    </CAppPageLayout>
+    </PcContentLayout>
   );
 }

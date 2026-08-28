@@ -77,12 +77,14 @@ function buildTheme(mode: Mode) {
 export function PcColorModeProvider({ children }: PropsWithChildren) {
   const [mode, setMode] = useState<Mode>('dark');
   const [modeSource, setModeSource] = useState<ModeSource>('system');
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     const searchMode = parseMode(new URLSearchParams(window.location.search).get('mode'));
     if (searchMode) {
       setModeSource('query');
       setMode(searchMode);
+      setInitialized(true);
       return;
     }
 
@@ -90,23 +92,28 @@ export function PcColorModeProvider({ children }: PropsWithChildren) {
     if (stored) {
       setModeSource('storage');
       setMode(stored);
+      setInitialized(true);
       return;
     }
 
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     setModeSource('system');
     setMode(prefersDark ? 'dark' : 'light');
+    setInitialized(true);
   }, []);
 
   useEffect(() => {
+    if (!initialized) {
+      return;
+    }
     document.documentElement.dataset.pcTheme = mode;
     if (modeSource !== 'query') {
       window.localStorage.setItem(STORAGE_KEY, mode);
     }
-  }, [mode, modeSource]);
+  }, [initialized, mode, modeSource]);
 
   useEffect(() => {
-    if (modeSource === 'query') {
+    if (!initialized || modeSource === 'query') {
       return;
     }
     const onStorage = (event: StorageEvent) => {
@@ -121,7 +128,7 @@ export function PcColorModeProvider({ children }: PropsWithChildren) {
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, [modeSource]);
+  }, [initialized, modeSource]);
 
   const value = useMemo<PcColorModeValue>(
     () => ({

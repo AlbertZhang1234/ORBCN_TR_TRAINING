@@ -124,16 +124,35 @@ def _prepare_multimodal_content(file_bytes: bytes, filename: str) -> dict:
     }
 
 
-def _extract_allowed_codes(prompt_content: str) -> list[str]:
-    # Matches list lines like: "- **PARK**: ..."
-    found = re.findall(r"-\s*\*\*([A-Z]{3,5})\*\*:", prompt_content)
-    codes = []
-    for code in found:
-        if code not in codes:
-            codes.append(code)
-    if "SOBE" not in codes:
-        codes.append("SOBE")
-    return codes
+def _normalize_booking_rules(raw_rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rules: list[dict[str, Any]] = []
+    for raw_rule in raw_rules:
+        code = str(raw_rule.get("code", "")).strip().upper()
+        if not re.fullmatch(r"[A-Z0-9]{2,10}", code):
+            continue
+        keywords = raw_rule.get("keywords", [])
+        if not isinstance(keywords, list):
+            keywords = []
+        rules.append({
+            "code": code,
+            "category": str(raw_rule.get("category", "other")).strip(),
+            "name_zh": str(raw_rule.get("name_zh", "")).strip(),
+            "name_en": str(raw_rule.get("name_en", "")).strip(),
+            "description": str(raw_rule.get("description", "")).strip(),
+            "keywords": [str(keyword).strip() for keyword in keywords if str(keyword).strip()],
+        })
+    return rules
+
+
+def _build_booking_rule_prompt(rules: list[dict[str, Any]]) -> str:
+    lines = ["### 记账规则主数据（必须从下列代码中选择）"]
+    for rule in rules:
+        names = " / ".join(value for value in [rule["name_zh"], rule["name_en"]] if value)
+        keywords = "、".join(rule["keywords"])
+        detail = rule["description"] or names
+        suffix = f"；关键词：{keywords}" if keywords else ""
+        lines.append(f'- **{rule["code"]}**: {detail}{suffix}')
+    return "\n".join(lines)
 
 
 def _parse_model_json(raw: str) -> dict[str, Any]:
@@ -171,19 +190,7 @@ def _normalize_code(code: str, allowed_codes: list[str]) -> str:
     if c in allowed_codes:
         return c
 
-    alias_map = {
-        "TAXI": "TAXI",
-        "PARK": "PARK",
-        "HOTL": "HOTL",
-        "BEWI": "BEWI",
-        "BAHC": "BAHC",
-        "FLUG": "FLUG",
-        "BURO": "BURO",
-        "SOBE": "SOBE",
-    }
-    if c in alias_map and alias_map[c] in allowed_codes:
-        return alias_map[c]
-    return "SOBE"
+    return "SOBE" if "SOBE" in allowed_codes else allowed_codes[0]
 
 
 def _normalize_currency(value: Any) -> str:
@@ -260,26 +267,16 @@ def _extract_invoice_remark(text: str) -> str:
     return ""
 
 
-def _rule_based_extract(text: str, allowed_codes: list[str]) -> InvoiceExtractionResult:
+def _rule_based_extract(text: str, booking_rules: list[dict[str, Any]]) -> InvoiceExtractionResult:
     t = text.lower()
-    mapping = [
-        ("BAHC", ["火车", "高铁", "动车", "铁路", "12306", "电子客票"]),
-        ("FLUG", ["航班", "机票", "airline", "flight", "登机"]),
-        ("TAXI", ["出租车", "taxi", "滴滴", "网约车", "首汽约车", "客运服务费", "一嗨", "神州", "租车"]),
-        ("PARK", ["停车", "车辆停放", "车位", "停车场"]),
-        ("AUTG", ["高速", "过路", "通行费", "etc", "路桥"]),
-        ("BENL", ["加油", "汽油", "柴油", "中石油", "中石化"]),
-        ("HOTL", ["酒店", "住宿", "room", "inn", "房费"]),
-        ("BEWI", ["餐饮", "饭店", "meal", "food", "用餐"]),
-        ("BURO", ["办公用品", "文具", "纸张", "耗材"]),
-    ]
-
-    category = "SOBE"
+    allowed_codes = [rule["code"] for rule in booking_rules]
+    category = "SOBE" if "SOBE" in allowed_codes else allowed_codes[0]
     reason = "未命中分类关键词"
-    for code, keywords in mapping:
-        if code in allowed_codes and any(k in t for k in keywords):
-            category = code
-            reason = f"命中关键词: {keywords[0]}"
+    for rule in booking_rules:
+        matched = next((keyword for keyword in rule["keywords"] if keyword.lower() in t), None)
+        if matched:
+            category = rule["code"]
+            reason = f"命中关键词: {matched}"
             break
 
     # Basic regex fallback for key header fields
@@ -366,10 +363,15 @@ def process_invoice(
     temperature: float,
     base_url: str | None = None,
     api_key: str | None = None,
+    booking_rules: list[dict[str, Any]] | None = None,
 ) -> InvoiceExtractionResult:
     """
     Unified entry point: Process invoice file -> Extract info & Classify -> Return Structured Data
     """
+    normalized_rules = _normalize_booking_rules(booking_rules or [])
+    if not normalized_rules:
+        raise ExtractionError("No valid booking rules provided")
+
     # 1. Prepare Content (PDF -> Images)
     try:
         content_data = _prepare_multimodal_content(file_bytes, filename)
@@ -397,7 +399,8 @@ def process_invoice(
         )
 
     # 2. Setup LLM & Schema
-    allowed_codes = _extract_allowed_codes(prompt_content)
+    allowed_codes = [rule["code"] for rule in normalized_rules]
+    prompt_content = f"{prompt_content}\n\n{_build_booking_rule_prompt(normalized_rules)}"
     
     # This Schema MUST match the fields we want to extract
     response_schema = {
@@ -506,6 +509,6 @@ def process_invoice(
     except Exception as exc:
         logger.warning("LLM extract failed, fallback to rule-based: %s", exc)
         text_content = content_data.get("text_fallback", "")
-        result = _rule_based_extract(text_content, allowed_codes)
+        result = _rule_based_extract(text_content, normalized_rules)
         result.raw_model_output = f"llm_error: {exc}"
         return result

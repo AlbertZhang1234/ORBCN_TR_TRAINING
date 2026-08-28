@@ -14,6 +14,7 @@ import {
 import { buildWhereClauseRuntime, normalizePlanForAccessRuntime } from './queryRuntime';
 import { buildFallbackToolInputRuntime, planToolInputRuntime } from './planningRuntime';
 import { loadRuntimeMetadataRuntime } from './metadataRuntime';
+import { listBookingRules } from '../../../../services/Invoice/booking-rules';
 
 export type OttoField =
   | 'tr_id'
@@ -437,13 +438,14 @@ export function buildFallbackToolInput(question: string, metadata: OttoRuntimeMe
 }
 
 async function planToolInput(question: string, metadata: OttoRuntimeMetadata, llm: LlmConfig | null): Promise<OttoToolInput> {
+  const bookingRules = await listBookingRules();
   return planToolInputRuntime(question, metadata, llm, {
     callChatCompletion,
     extractJsonObject,
     toText,
     toLowerText,
     toFiniteNumber,
-  });
+  }, bookingRules);
 }
 
 function buildWhereClause(params: unknown[], ctx: OttoAuthContext, plan: OttoToolInput): string {

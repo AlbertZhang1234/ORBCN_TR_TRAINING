@@ -31,6 +31,7 @@ const ADMIN_PROXY_TABLES = new Set([
   'otto_project',
   'otto_travelentry',
   'otto_invoices',
+  'otto_booking_rule',
   'otto_tr_h',
   'otto_tr_t',
   't_loginsessions',

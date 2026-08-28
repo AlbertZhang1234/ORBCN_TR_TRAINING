@@ -17,11 +17,19 @@ import { listReimbursementLines, type ReimbursementListRow } from '../../../serv
 import type { InvoiceListRow } from '../../../services/Invoice/list';
 import { toFilter, readInvoiceStatus } from './helpers';
 import { normalizeWorkflowStatus } from '../../../services/_core/locks';
-import { BOOKING_RULE_OPTIONS } from '../../../services/Invoice/booking-rules';
+import { useBookingRuleOptions } from '../../../services/Invoice/useBookingRuleOptions';
+import { formatBookingRuleOption } from '../../../services/Invoice/booking-rules';
 import { saveInvoiceBookingRule } from '../../../services/Invoice/save';
 import InvoicePreviewDialog from '../invoices/_components/InvoicePreviewDialog';
 
-function statusLabel(status: ReturnType<typeof normalizeWorkflowStatus>, t: (key: string, fallback: string) => string): string {
+function statusLabel(
+  status: ReturnType<typeof normalizeWorkflowStatus>,
+  t: (key: string, fallback: string) => string,
+  rawStatus?: string,
+): string {
+  if (String(rawStatus ?? '').trim() === '已回传SAP系统') {
+    return t('booking_status_sap_posted', '已回传SAP系统');
+  }
   if (status === 'WAIT FOR APPROVAL') {
     return t('stat_wait_approval', 'Waiting');
   }
@@ -59,7 +67,7 @@ export default function ReimbursementDetail({
   standalone = false,
   actions,
 }: ReimbursementDetailProps) {
-  const { t } = usePcI18n();
+  const { t, lang } = usePcI18n();
   const { showError, showSuccess, messageBox } = useMessageBox(t);
   const [detailRow, setDetailRow] = useState<ReimbursementListRow | null>(null);
   const [detailInvoices, setDetailInvoices] = useState<DetailInvoiceRow[]>([]);
@@ -71,6 +79,7 @@ export default function ReimbursementDetail({
   const [editingInvoiceNo, setEditingInvoiceNo] = useState('');
   const [bookingCodeDraft, setBookingCodeDraft] = useState('');
   const [savingBookingCode, setSavingBookingCode] = useState(false);
+  const { options: bookingRuleOptions } = useBookingRuleOptions(bookingCodeDraft);
 
   useEffect(() => {
     // 1. Initialize with row data
@@ -315,10 +324,13 @@ export default function ReimbursementDetail({
                 {
                   id: 'book_status',
                   label: t('booking_status', 'Booking Status'),
-                  value: statusLabel(normalizeWorkflowStatus(String(
-                    // @ts-ignore
-                    detailRow._bookingstatus ?? detailRow.bookingstatus ?? ''
-                  )), t),
+                  value: (() => {
+                    const rawStatus = String(
+                      // @ts-ignore
+                      detailRow._bookingstatus ?? detailRow.bookingstatus ?? '',
+                    );
+                    return statusLabel(normalizeWorkflowStatus(rawStatus), t, rawStatus);
+                  })(),
                 },
               ],
             },
@@ -361,9 +373,9 @@ export default function ReimbursementDetail({
               select
             >
               <MenuItem value="">{t('none', '(None)')}</MenuItem>
-              {BOOKING_RULE_OPTIONS.map((option) => (
+              {bookingRuleOptions.map((option) => (
                 <MenuItem key={option.code} value={option.code}>
-                  {option.label}
+                  {formatBookingRuleOption(option, lang)}
                 </MenuItem>
               ))}
             </TextField>

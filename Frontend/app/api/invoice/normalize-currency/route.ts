@@ -39,14 +39,14 @@ function readApiKey(): string {
   ).trim();
 }
 
-async function fetchRateToCny(originalCurrency: string): Promise<number> {
-  if (originalCurrency === LOCAL_CURRENCY) {
+async function fetchRate(originalCurrency: string, targetCurrency: string): Promise<number> {
+  if (originalCurrency === targetCurrency) {
     return 1;
   }
 
   const apiKey = readApiKey();
   if (!apiKey) {
-    throw new Error('exchg_apikey is required for foreign currency invoice conversion');
+    throw new Error('exchg_apikey is required for invoice currency conversion');
   }
 
   const response = await fetch(
@@ -60,28 +60,30 @@ async function fetchRateToCny(originalCurrency: string): Promise<number> {
     throw new Error(`Exchange rate lookup failed for ${originalCurrency}${errorType ? `: ${errorType}` : ''}`);
   }
 
-  const cnyRate = Number(payload.conversion_rates?.[LOCAL_CURRENCY]);
-  if (!Number.isFinite(cnyRate) || cnyRate <= 0) {
-    throw new Error(`Exchange rate ${originalCurrency}->${LOCAL_CURRENCY} is not available`);
+  const rate = Number(payload.conversion_rates?.[targetCurrency]);
+  if (!Number.isFinite(rate) || rate <= 0) {
+    throw new Error(`Exchange rate ${originalCurrency}->${targetCurrency} is not available`);
   }
 
-  return cnyRate;
+  return rate;
 }
 
-function appendConversionComment(comment: unknown, originalCurrency: string, rate: number): string {
+function appendConversionComment(comment: unknown, sourceCurrency: string, targetCurrency: string, rate: number): string {
   const current = String(comment ?? '').trim();
-  if (originalCurrency === LOCAL_CURRENCY || rate === 1) {
+  if (sourceCurrency === targetCurrency || rate === 1) {
     return current;
   }
-  const note = `Original currency ${originalCurrency}; converted to ${LOCAL_CURRENCY} at rate ${rate}.`;
+  const note = `Converted amounts from ${sourceCurrency} to ${targetCurrency} at rate ${rate}.`;
   return current ? `${current}\n${note}` : note;
 }
 
-async function normalizeInvoiceCurrency(payload: InvoiceRecord): Promise<InvoiceRecord> {
+async function normalizeInvoiceCurrency(payload: InvoiceRecord, amountCurrency?: string): Promise<InvoiceRecord> {
   const originalCurrency =
     normalizeCurrency(payload.originalcurrency) ||
     normalizeCurrency(payload.currency) ||
     LOCAL_CURRENCY;
+  const targetCurrency = normalizeCurrency(payload.currency) || originalCurrency;
+  const sourceCurrency = normalizeCurrency(amountCurrency) || originalCurrency;
 
   const originalAmount =
     toFiniteNumber(payload.originalamount) ??
@@ -89,10 +91,9 @@ async function normalizeInvoiceCurrency(payload: InvoiceRecord): Promise<Invoice
     toFiniteNumber(payload.totalnetamount) ??
     toFiniteNumber(payload.taxamount);
 
-  const rate = await fetchRateToCny(originalCurrency);
   const next: InvoiceRecord = {
     ...payload,
-    currency: LOCAL_CURRENCY,
+    currency: targetCurrency,
     originalcurrency: originalCurrency,
   };
 
@@ -100,25 +101,36 @@ async function normalizeInvoiceCurrency(payload: InvoiceRecord): Promise<Invoice
     next.originalamount = roundMoney(originalAmount);
   }
 
-  if (originalCurrency === LOCAL_CURRENCY && toFiniteNumber(payload.grossamount) === undefined && originalAmount !== undefined) {
-    next.grossamount = roundMoney(originalAmount);
+  if (sourceCurrency === targetCurrency) {
+    if (
+      sourceCurrency === originalCurrency &&
+      toFiniteNumber(payload.grossamount) === undefined &&
+      originalAmount !== undefined
+    ) {
+      next.grossamount = roundMoney(originalAmount);
+    }
+    return next;
   }
 
-  if (originalCurrency !== LOCAL_CURRENCY) {
-    const gross = toFiniteNumber(payload.grossamount);
-    const net = toFiniteNumber(payload.totalnetamount);
-    const tax = toFiniteNumber(payload.taxamount);
-    if (gross !== undefined) {
-      next.grossamount = roundMoney(gross * rate);
-    } else if (originalAmount !== undefined) {
-      next.grossamount = roundMoney(originalAmount * rate);
-    }
-    if (net !== undefined) next.totalnetamount = roundMoney(net * rate);
-    if (tax !== undefined) next.taxamount = roundMoney(tax * rate);
-    next.comment = appendConversionComment(payload.comment, originalCurrency, rate);
+  const rate = await fetchRate(sourceCurrency, targetCurrency);
+  const gross = toFiniteNumber(payload.grossamount);
+  const net = toFiniteNumber(payload.totalnetamount);
+  const tax = toFiniteNumber(payload.taxamount);
+  if (gross !== undefined) {
+    next.grossamount = roundMoney(gross * rate);
+  } else if (sourceCurrency === originalCurrency && originalAmount !== undefined) {
+    next.grossamount = roundMoney(originalAmount * rate);
   }
+  if (net !== undefined) next.totalnetamount = roundMoney(net * rate);
+  if (tax !== undefined) next.taxamount = roundMoney(tax * rate);
+  next.comment = appendConversionComment(payload.comment, sourceCurrency, targetCurrency, rate);
 
   return next;
+}
+
+interface NormalizeCurrencyRequest {
+  invoice?: InvoiceRecord;
+  amountCurrency?: string;
 }
 
 export async function POST(request: Request) {
@@ -128,8 +140,12 @@ export async function POST(request: Request) {
       return auth;
     }
 
-    const payload = (await request.json()) as InvoiceRecord;
-    return NextResponse.json(await normalizeInvoiceCurrency(payload), { status: 200 });
+    const body = (await request.json()) as NormalizeCurrencyRequest & InvoiceRecord;
+    const payload = body.invoice ?? body;
+    return NextResponse.json(
+      await normalizeInvoiceCurrency(payload, body.invoice ? body.amountCurrency : undefined),
+      { status: 200 },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Invoice currency normalization failed';
     return NextResponse.json({ message }, { status: 500 });

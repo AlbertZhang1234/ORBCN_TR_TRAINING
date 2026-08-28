@@ -36,6 +36,7 @@ import { deleteTravelEntry } from '../../../services/TravelEntry/delete';
 import { listUsers, type UserListRow } from '../../../services/User/list';
 import { listProjects, type ProjectListRow } from '../../../services/Projects/list';
 import { BusyStandardPage } from '../_components/TableLoadingMarquee';
+import { PcContentLayout } from '../_components/PcContentLayout';
 import type { VariantMetadata } from '@/components/Molecules/CVariantManagement';
 
 const defaultFilters: Record<string, FilterValue> = {
@@ -835,15 +836,7 @@ export default function TravelEntriesPage() {
   const tableBusy = loading || saving;
 
   return (
-    <CAppPageLayout
-      appTitle={t('travel_entries', 'Travel Management')}
-      menuData={menuData}
-      logo={<HeaderLogo />}
-      user={headerUser}
-      locale={lang}
-      onLocaleChange={(l) => changeLanguage(l as any)}
-      localeOptions={['en', 'zh']}
-      onUserLogout={() => void performClientLogout({ router, replace: true })}
+    <PcContentLayout
       contentSx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
     >
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -1024,6 +1017,6 @@ export default function TravelEntriesPage() {
         </DialogActions>
       </Dialog>
       {messageBox}
-    </CAppPageLayout>
+    </PcContentLayout>
   );
 }

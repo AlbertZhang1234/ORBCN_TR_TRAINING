@@ -9,7 +9,12 @@ const BOOKED_VALUES = new Set([
   'locked',
   '已记账',
   '已入账',
+  '已回传sap系统',
 ]);
+
+export function isSapPostedStatus(value: unknown): boolean {
+  return normalizeStatus(value) === '已回传sap系统';
+}
 
 export const STATUS_CANDIDATES = [
   'bookingstatus',

@@ -18,7 +18,11 @@ import {
 function statusLabel(
   status: ReturnType<typeof normalizeWorkflowStatus>,
   t: (key: string, fallback: string) => string,
+  rawStatus?: string,
 ): string {
+  if (String(rawStatus ?? '').trim() === '已回传SAP系统') {
+    return t('booking_status_sap_posted', '已回传SAP系统');
+  }
   if (status === 'WAIT FOR APPROVAL') {
     return t('stat_wait_approval', 'Waiting');
   }
@@ -87,6 +91,7 @@ interface ReimbursementListProps {
   selected: string[];
   onSelectionChange: (ids: string[]) => void;
   onBook: () => void;
+  onSapBook: () => void;
   onDetail: (row: ReimbursementListRow) => void;
   t: (key: string, defaultVal: string) => string;
 }
@@ -98,6 +103,7 @@ export default function ReimbursementList({
   selected,
   onSelectionChange,
   onBook,
+  onSapBook,
   onDetail,
   t,
 }: ReimbursementListProps) {
@@ -131,7 +137,7 @@ export default function ReimbursementList({
       { label: t('created_at', 'Created At'), read: (row: BookingRow) => row._createdAt },
       {
         label: t('booking_status', 'Booking Status'),
-        read: (row: BookingRow) => statusLabel(normalizeWorkflowStatus(row._bookingstatus), t),
+        read: (row: BookingRow) => statusLabel(normalizeWorkflowStatus(row._bookingstatus), t, row._bookingstatus),
       },
       {
         label: t('approval_status', 'Approval Status'),
@@ -218,7 +224,7 @@ export default function ReimbursementList({
           reimbursement_no: bundle.row.trno ?? '',
           reimbursement_userid: bundle.row.userid ?? '',
           reimbursement_created_at: bundle.row._createdAt ?? '',
-          reimbursement_booking_status: statusLabel(normalizeWorkflowStatus(bundle.row._bookingstatus), t),
+          reimbursement_booking_status: statusLabel(normalizeWorkflowStatus(bundle.row._bookingstatus), t, bundle.row._bookingstatus),
           reimbursement_approval_status: statusLabel(normalizeWorkflowStatus(bundle.row._approvalstatus), t),
           reimbursement_approver: bundle.row._approver ?? '',
           invoiceno: invoiceNo,
@@ -413,6 +419,7 @@ export default function ReimbursementList({
       t={t}
       showManageActions={false}
       onBook={onBook}
+      onSapBook={onSapBook}
       onExport={() => void exportData()}
       selectionMode="multiple"
       pageTitle={t('tr_booking_title', 'TR Booking & Archive')}

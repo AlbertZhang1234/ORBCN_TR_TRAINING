@@ -1,13 +1,13 @@
 import { buildPlannerPrompt } from './prompts';
 import { applyQuestionHeuristics, maybeApplyMonthRange } from './planningHeuristics';
 import {
-  BOOKING_CODE_HINTS,
   DEFAULT_TOOL_INPUT,
   FIELD_DEFINITIONS,
   STATUS_NORMALIZERS,
   STOP_TERMS,
   VALUE_HINT_FIELDS,
 } from './ottoSchema';
+import type { BookingRuleRecord } from '../../../../services/Invoice/booking-rules';
 import { isDateField, isGroupField, isOttoField, isSortField } from './queryRuntime';
 import type {
   OttoField,
@@ -257,7 +257,11 @@ function normalizeToolInput(question: string, value: unknown, deps: PlanningDeps
 }
 
 
-function collectMentionedFilters(question: string, metadata: OttoRuntimeMetadata): OttoFilter[] {
+function collectMentionedFilters(
+  question: string,
+  metadata: OttoRuntimeMetadata,
+  bookingRules: BookingRuleRecord[],
+): OttoFilter[] {
   const filters: OttoFilter[] = [];
   const lowered = question.toLowerCase();
 
@@ -295,9 +299,12 @@ function collectMentionedFilters(question: string, metadata: OttoRuntimeMetadata
     filters.push({ field: 'bookingcode', operator: 'eq', value: code });
   }
 
-  for (const hint of BOOKING_CODE_HINTS) {
-    if (hint.aliases.some((alias) => lowered.includes(alias.toLowerCase()))) {
-      filters.push({ field: 'bookingcode', operator: 'eq', value: hint.code });
+  for (const rule of bookingRules) {
+    const aliases = [rule.code, rule.name_zh, rule.name_en, ...(rule.keywords ?? [])]
+      .map((value) => String(value ?? '').trim())
+      .filter(Boolean);
+    if (aliases.some((alias) => lowered.includes(alias.toLowerCase()))) {
+      filters.push({ field: 'bookingcode', operator: 'eq', value: rule.code });
     }
   }
 
@@ -317,11 +324,15 @@ function extractSearchTerms(question: string): string[] {
   return sanitizeSearchTerms(question, unique.slice(0, 4));
 }
 
-export function buildFallbackToolInputRuntime(question: string, metadata: OttoRuntimeMetadata): OttoToolInput {
+export function buildFallbackToolInputRuntime(
+  question: string,
+  metadata: OttoRuntimeMetadata,
+  bookingRules: BookingRuleRecord[] = [],
+): OttoToolInput {
   const plan: OttoToolInput = {
     ...DEFAULT_TOOL_INPUT,
     language: /[\u4e00-\u9fff]/.test(question) ? 'zh' : 'en',
-    filters: collectMentionedFilters(question, metadata),
+    filters: collectMentionedFilters(question, metadata, bookingRules),
     searchTerms: [],
   };
 
@@ -409,29 +420,30 @@ export async function planToolInputRuntime(
   metadata: OttoRuntimeMetadata,
   llm: { baseUrl: string; apiKey: string; model: string } | null,
   deps: PlanningDeps,
+  bookingRules: BookingRuleRecord[] = [],
 ): Promise<OttoToolInput> {
   if (!llm) {
-    return buildFallbackToolInputRuntime(question, metadata);
+    return buildFallbackToolInputRuntime(question, metadata, bookingRules);
   }
 
   try {
     const raw = await deps.callChatCompletion(
       llm,
       [
-        { role: 'system', content: buildPlannerPrompt(metadata) },
+        { role: 'system', content: buildPlannerPrompt(metadata, bookingRules) },
         { role: 'user', content: question },
       ],
       800,
     );
     const jsonText = deps.extractJsonObject(raw);
     if (!jsonText) {
-      return buildFallbackToolInputRuntime(question, metadata);
+      return buildFallbackToolInputRuntime(question, metadata, bookingRules);
     }
     const normalized = normalizeToolInput(question, JSON.parse(jsonText), deps);
     const merged: OttoToolInput = {
       ...normalized,
       searchTerms: sanitizeSearchTerms(question, normalized.searchTerms),
-      filters: dedupeFilters([...normalized.filters, ...collectMentionedFilters(question, metadata)]),
+      filters: dedupeFilters([...normalized.filters, ...collectMentionedFilters(question, metadata, bookingRules)]),
     };
     if (merged.searchTerms.length === 0) {
       merged.searchTerms = extractSearchTerms(question).filter((term) => term.length > 1);
@@ -441,6 +453,6 @@ export async function planToolInputRuntime(
     }
     return applyQuestionHeuristics(question, merged);
   } catch {
-    return buildFallbackToolInputRuntime(question, metadata);
+    return buildFallbackToolInputRuntime(question, metadata, bookingRules);
   }
 }

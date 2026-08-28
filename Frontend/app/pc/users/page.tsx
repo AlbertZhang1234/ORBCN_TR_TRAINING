@@ -16,6 +16,7 @@ import {
 import ManageAccountsRoundedIcon from '@mui/icons-material/ManageAccountsRounded';
 import LockResetRoundedIcon from '@mui/icons-material/LockResetRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import {
   CAppPageLayout,
   resolveVariantFilters,
@@ -33,9 +34,11 @@ import { assignRole } from '../../../services/User/assignrole';
 import { removeRole } from '../../../services/User/removerole';
 import { resetPassword } from '../../../services/User/resetpassword';
 import { createUser } from '../../../services/User/create';
+import { changeUser } from '../../../services/User/change';
 import { buildPcMenuData, HeaderLogo } from '../_components/nav';
 import { BusyStandardPage, BusyTable } from '../_components/TableLoadingMarquee';
 import type { VariantMetadata } from '@/components/Molecules/CVariantManagement';
+import { PcContentLayout } from '../_components/PcContentLayout';
 import { performClientLogout } from '../../../services/Auth/logoutClient';
 
 const defaultFilters: Record<string, FilterValue> = {
@@ -44,6 +47,7 @@ const defaultFilters: Record<string, FilterValue> = {
   firstname: { value: '', operator: 'contains' },
   lastname: { value: '', operator: 'contains' },
   mobile: { value: '', operator: 'contains' },
+  sap_supplier_id: { value: '', operator: 'contains' },
 };
 
 export default function UsersPage() {
@@ -65,6 +69,7 @@ export default function UsersPage() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [targetUserId, setTargetUserId] = useState<string>('');
   const [initialRoleIds, setInitialRoleIds] = useState<string[]>([]);
   const [roleSelection, setRoleSelection] = useState<string[]>([]);
@@ -72,11 +77,19 @@ export default function UsersPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
+  const [savingEditUser, setSavingEditUser] = useState(false);
   const [newUserId, setNewUserId] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserFirstname, setNewUserFirstname] = useState('');
   const [newUserLastname, setNewUserLastname] = useState('');
   const [newUserMobile, setNewUserMobile] = useState('');
+  const [newUserSapSupplierId, setNewUserSapSupplierId] = useState('');
+  const [editUserId, setEditUserId] = useState('');
+  const [editUserEmail, setEditUserEmail] = useState('');
+  const [editUserFirstname, setEditUserFirstname] = useState('');
+  const [editUserLastname, setEditUserLastname] = useState('');
+  const [editUserMobile, setEditUserMobile] = useState('');
+  const [editUserSapSupplierId, setEditUserSapSupplierId] = useState('');
   const LAYOUT_KEY = 'pc_users_default_layout_v1';
 
   const reportError = (message: string) => {
@@ -201,11 +214,36 @@ export default function UsersPage() {
     setNewUserFirstname('');
     setNewUserLastname('');
     setNewUserMobile('');
+    setNewUserSapSupplierId('');
     setCreateDialogOpen(true);
   };
 
   const closeCreateUserDialog = () => {
     setCreateDialogOpen(false);
+  };
+
+  const openEditUserDialog = () => {
+    if (selected.length !== 1) {
+      reportError(t('please_select_one_user_edit', 'Please select one user to edit'));
+      return;
+    }
+    const current = users.find((user) => String(user.userid ?? '') === selected[0]);
+    if (!current) {
+      reportError(t('failed_load_users', 'Failed to load users'));
+      return;
+    }
+    setEditUserId(String(current.userid ?? ''));
+    setEditUserEmail(String(current.email ?? ''));
+    setEditUserFirstname(String(current.firstname ?? ''));
+    setEditUserLastname(String(current.lastname ?? ''));
+    setEditUserMobile(String(current.mobile ?? ''));
+    setEditUserSapSupplierId(String(current.sap_supplier_id ?? ''));
+    setError('');
+    setEditDialogOpen(true);
+  };
+
+  const closeEditUserDialog = () => {
+    setEditDialogOpen(false);
   };
 
   const saveAssignedRoles = async () => {
@@ -278,6 +316,7 @@ export default function UsersPage() {
     const firstname = newUserFirstname.trim();
     const lastname = newUserLastname.trim();
     const mobile = newUserMobile.trim();
+    const sap_supplier_id = newUserSapSupplierId.trim();
 
     if (!userid) {
       reportError(t('please_enter_user_id', 'Please enter User ID'));
@@ -298,6 +337,7 @@ export default function UsersPage() {
         firstname,
         lastname,
         mobile,
+        sap_supplier_id,
         password: userid,
       });
       closeCreateUserDialog();
@@ -310,6 +350,44 @@ export default function UsersPage() {
     }
   };
 
+  const saveEditUser = async () => {
+    const userId = editUserId.trim();
+    const email = editUserEmail.trim();
+    const sap_supplier_id = editUserSapSupplierId.trim();
+    if (!userId) {
+      reportError(t('please_select_one_user_edit', 'Please select one user to edit'));
+      return;
+    }
+    if (!email) {
+      reportError(t('please_enter_email', 'Please enter Email'));
+      return;
+    }
+    if (sap_supplier_id.length > 10) {
+      reportError(t('sap_supplier_id_max_length', 'SAP Supplier ID must not exceed 10 characters'));
+      return;
+    }
+
+    setSavingEditUser(true);
+    setError('');
+    try {
+      await changeUser(userId, {
+        email,
+        firstname: editUserFirstname.trim(),
+        lastname: editUserLastname.trim(),
+        mobile: editUserMobile.trim(),
+        sap_supplier_id,
+      });
+      closeEditUserDialog();
+      setSelected([]);
+      await load();
+      showSuccess(t('user_saved_success', 'User saved successfully'));
+    } catch (err) {
+      reportError(err instanceof Error ? err.message : t('failed_change_user', 'Failed to change user'));
+    } finally {
+      setSavingEditUser(false);
+    }
+  };
+
   const filterFields = useMemo<FilterField[]>(
     () => [
       { id: 'userid', label: t('user_id', 'User ID'), type: 'text' },
@@ -317,6 +395,7 @@ export default function UsersPage() {
       { id: 'firstname', label: t('first_name', 'First Name'), type: 'text' },
       { id: 'lastname', label: t('last_name', 'Last Name'), type: 'text' },
       { id: 'mobile', label: t('mobile', 'Mobile'), type: 'text' },
+      { id: 'sap_supplier_id', label: t('sap_supplier_id', 'SAP Supplier ID'), type: 'text' },
     ],
     [t],
   );
@@ -327,6 +406,7 @@ export default function UsersPage() {
     const firstnameFilter = String(appliedFilters.firstname?.value ?? '').trim().toLowerCase();
     const lastnameFilter = String(appliedFilters.lastname?.value ?? '').trim().toLowerCase();
     const mobileFilter = String(appliedFilters.mobile?.value ?? '').trim().toLowerCase();
+    const sapSupplierIdFilter = String(appliedFilters.sap_supplier_id?.value ?? '').trim().toLowerCase();
 
     return users
       .filter((user) => {
@@ -335,6 +415,7 @@ export default function UsersPage() {
         const firstname = String(user.firstname ?? '');
         const lastname = String(user.lastname ?? '');
         const mobile = String(user.mobile ?? '');
+        const sapSupplierId = String(user.sap_supplier_id ?? '');
 
         if (useridFilter && !userId.toLowerCase().includes(useridFilter)) {
           return false;
@@ -351,6 +432,9 @@ export default function UsersPage() {
         if (mobileFilter && !mobile.toLowerCase().includes(mobileFilter)) {
           return false;
         }
+        if (sapSupplierIdFilter && !sapSupplierId.toLowerCase().includes(sapSupplierIdFilter)) {
+          return false;
+        }
 
         return true;
       });
@@ -363,8 +447,9 @@ export default function UsersPage() {
       { id: 'firstname', label: t('first_name', 'First Name'), minWidth: 160 },
       { id: 'lastname', label: t('last_name', 'Last Name'), minWidth: 160 },
       { id: 'mobile', label: t('mobile', 'Mobile'), minWidth: 150 },
+      { id: 'sap_supplier_id', label: t('sap_supplier_id', 'SAP Supplier ID'), minWidth: 180 },
     ],
-    [],
+    [t],
   );
 
   const roleColumns = useMemo<any[]>(
@@ -424,22 +509,24 @@ export default function UsersPage() {
     </Tooltip>
   );
 
+  const editUserAction = (
+    <Tooltip title={selected.length === 1 ? t('edit_user', 'Edit User') : t('please_select_one_user_edit', 'Please select one user to edit')}>
+      <span>
+        <IconButton onClick={openEditUserDialog} disabled={selected.length !== 1} aria-label={t('edit_user', 'Edit User')}>
+          <EditRoundedIcon />
+        </IconButton>
+      </span>
+    </Tooltip>
+  );
+
   if (!sessionUser) {
     return null;
   }
 
-  const tableBusy = loading || savingRoles || savingPassword || savingUser;
+  const tableBusy = loading || savingRoles || savingPassword || savingUser || savingEditUser;
 
   return (
-    <CAppPageLayout
-      appTitle={t('users', 'User Management')}
-      menuData={menuData}
-      logo={<HeaderLogo />}
-      user={headerUser}
-      locale={lang}
-      onLocaleChange={(l) => changeLanguage(l as any)}
-      localeOptions={['en', 'zh']}
-      onUserLogout={() => void performClientLogout({ router, replace: true })}
+    <PcContentLayout
       contentSx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
     >
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -479,7 +566,7 @@ export default function UsersPage() {
               setSelected(rowsSelected.map((item) => String(item))),
             layout: layout ?? undefined,
             onLayoutSave: handleSaveLayout,
-            actions: [createUserAction, assignRoleAction, resetPasswordAction],
+            actions: [createUserAction, editUserAction, assignRoleAction, resetPasswordAction],
           }}
         />
       <Dialog open={createDialogOpen} onClose={closeCreateUserDialog} fullWidth maxWidth="sm">
@@ -517,6 +604,13 @@ export default function UsersPage() {
               onChange={(e) => setNewUserMobile(e.target.value)}
               fullWidth
             />
+            <TextField
+              label={t('sap_supplier_id', 'SAP Supplier ID')}
+              value={newUserSapSupplierId}
+              onChange={(e) => setNewUserSapSupplierId(e.target.value)}
+              inputProps={{ maxLength: 10 }}
+              fullWidth
+            />
             <Alert severity="info" sx={{ mt: 1 }}>
               {t('initial_password_notice', 'Initial password defaults to User ID. You can change it later using "Reset Password".')}
             </Alert>
@@ -527,6 +621,54 @@ export default function UsersPage() {
             {t('cancel', 'Cancel')}
           </Button>
           <Button onClick={saveCreateUser} variant="contained" disabled={savingUser}>
+            {t('save', 'Save')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={editDialogOpen} onClose={closeEditUserDialog} fullWidth maxWidth="sm">
+        <DialogTitle>{t('edit_user', 'Edit User')}</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Box sx={{ display: 'grid', gap: 2, mt: 1 }}>
+            <TextField label={t('user_id', 'User ID')} value={editUserId} fullWidth disabled />
+            <TextField
+              label={t('email', 'Email')}
+              value={editUserEmail}
+              onChange={(e) => setEditUserEmail(e.target.value)}
+              fullWidth
+              autoFocus
+            />
+            <TextField
+              label={t('first_name', 'First Name')}
+              value={editUserFirstname}
+              onChange={(e) => setEditUserFirstname(e.target.value)}
+              fullWidth
+            />
+            <TextField
+              label={t('last_name', 'Last Name')}
+              value={editUserLastname}
+              onChange={(e) => setEditUserLastname(e.target.value)}
+              fullWidth
+            />
+            <TextField
+              label={t('mobile', 'Mobile')}
+              value={editUserMobile}
+              onChange={(e) => setEditUserMobile(e.target.value)}
+              fullWidth
+            />
+            <TextField
+              label={t('sap_supplier_id', 'SAP Supplier ID')}
+              value={editUserSapSupplierId}
+              onChange={(e) => setEditUserSapSupplierId(e.target.value)}
+              inputProps={{ maxLength: 10 }}
+              fullWidth
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeEditUserDialog} disabled={savingEditUser}>
+            {t('cancel', 'Cancel')}
+          </Button>
+          <Button onClick={saveEditUser} variant="contained" disabled={savingEditUser}>
             {t('save', 'Save')}
           </Button>
         </DialogActions>
@@ -591,6 +733,6 @@ export default function UsersPage() {
         </DialogActions>
       </Dialog>
       {messageBox}
-    </CAppPageLayout>
+    </PcContentLayout>
   );
 }

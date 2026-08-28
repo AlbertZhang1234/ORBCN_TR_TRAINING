@@ -3,6 +3,7 @@ import { requireTravelEntry, requireUser, readStringCandidate } from '../_core/d
 import { insertRows, updateRows } from '../_core/supabaseRest';
 import { TABLES } from '../_core/tables';
 import { getClientSessionId } from '../_core/session';
+import { normalizeBusinessType } from './business-types';
 import {
   ensureInvoiceContentMutable,
   getInvoiceByNo,
@@ -16,7 +17,7 @@ function omitImmutableFields(payload: Record<string, unknown>): Record<string, u
   return next;
 }
 
-async function normalizeCurrencyForSave(payload: InvoiceRecord): Promise<InvoiceRecord> {
+async function normalizeCurrencyForSave(payload: InvoiceRecord, amountCurrency?: string): Promise<InvoiceRecord> {
   if (typeof window === 'undefined') {
     return payload;
   }
@@ -27,7 +28,7 @@ async function normalizeCurrencyForSave(payload: InvoiceRecord): Promise<Invoice
       'Content-Type': 'application/json',
       'x-session-id': getClientSessionId(),
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ invoice: payload, amountCurrency }),
   });
 
   if (!response.ok) {
@@ -47,13 +48,20 @@ async function normalizeCurrencyForSave(payload: InvoiceRecord): Promise<Invoice
 }
 
 export async function saveInvoice(payload: InvoiceRecord): Promise<InvoiceRecord> {
-  const normalizedPayload = await normalizeCurrencyForSave(payload);
+  const preparedPayload: InvoiceRecord = {
+    ...payload,
+    businesstype: normalizeBusinessType(payload.businesstype),
+  };
 
-  if (!normalizedPayload.invoiceno?.trim()) {
+  if (!preparedPayload.invoiceno?.trim()) {
     throw new ServiceError('invoiceno is required');
   }
 
-  const existing = await getInvoiceByNo(normalizedPayload.invoiceno);
+  const existing = await getInvoiceByNo(preparedPayload.invoiceno);
+  const normalizedPayload = await normalizeCurrencyForSave(
+    preparedPayload,
+    existing ? String(existing.currency ?? '') : undefined,
+  );
   if (!existing) {
     const userId = readStringCandidate(normalizedPayload, ['userid', 'user_id']);
     if (!userId) {

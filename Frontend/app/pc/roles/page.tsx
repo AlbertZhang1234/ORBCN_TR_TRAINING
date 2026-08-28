@@ -31,6 +31,7 @@ import { createRole } from '../../../services/Role/create';
 import { buildPcMenuData, HeaderLogo } from '../_components/nav';
 import { BusyStandardPage, BusyTable } from '../_components/TableLoadingMarquee';
 import type { VariantMetadata } from '@/components/Molecules/CVariantManagement';
+import { PcContentLayout } from '../_components/PcContentLayout';
 import { performClientLogout } from '../../../services/Auth/logoutClient';
 
 const defaultFilters: Record<string, FilterValue> = {
@@ -313,15 +314,7 @@ export default function RolesPage() {
   const tableBusy = loading || savingRole || savingUsers;
 
   return (
-    <CAppPageLayout
-      appTitle={t('roles', 'Role Management')}
-      menuData={menuData}
-      logo={<HeaderLogo />}
-      user={headerUser}
-      locale={lang}
-      onLocaleChange={(l) => changeLanguage(l as any)}
-      localeOptions={['en', 'zh']}
-      onUserLogout={() => void performClientLogout({ router, replace: true })}
+    <PcContentLayout
       contentSx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
     >
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -422,6 +415,6 @@ export default function RolesPage() {
         </DialogActions>
       </Dialog>
       {messageBox}
-    </CAppPageLayout>
+    </PcContentLayout>
   );
 }

@@ -31,6 +31,7 @@ import { createCustomer } from '../../../services/Customer/create';
 import { changeCustomer } from '../../../services/Customer/change';
 import { deleteCustomer } from '../../../services/Customer/delete';
 import { BusyStandardPage } from '../_components/TableLoadingMarquee';
+import { PcContentLayout } from '../_components/PcContentLayout';
 import type { VariantMetadata } from '@/components/Molecules/CVariantManagement';
 
 const defaultFilters: Record<string, FilterValue> = {
@@ -425,15 +426,7 @@ export default function CustomersPage() {
   const tableBusy = loading || saving;
 
   return (
-    <CAppPageLayout
-      appTitle={t('customers', 'Customer Management')}
-      menuData={menuData}
-      logo={<HeaderLogo />}
-      user={headerUser}
-      locale={lang}
-      onLocaleChange={(l) => changeLanguage(l as any)}
-      localeOptions={['en', 'zh']}
-      onUserLogout={() => void performClientLogout({ router, replace: true })}
+    <PcContentLayout
       contentSx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
     >
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -648,6 +641,6 @@ export default function CustomersPage() {
         </DialogActions>
       </Dialog>
       {messageBox}
-    </CAppPageLayout>
+    </PcContentLayout>
   );
 }

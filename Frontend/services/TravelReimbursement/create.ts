@@ -24,6 +24,7 @@ import {
   ReimbursementLineInput,
   normalizeChargeableFlag,
   normalizeLineAmount,
+  assertInvoiceSaveCurrencyConsistency,
 } from './_shared';
 import { sendReimbursementApprovalRequestEmail, sendReimbursementEmail } from './approve';
 
@@ -431,6 +432,7 @@ export async function createTravelReimbursement(
     defaultTrChargeable,
     defaultTxChargeable,
   );
+  assertInvoiceSaveCurrencyConsistency(preparedInvoices.map((item) => item.invoice));
 
   const header = await insertHeaderWithRetry(
     input.header,
@@ -443,13 +445,14 @@ export async function createTravelReimbursement(
   const lines: ReimbursementLine[] = [];
   const statusUpdatedInvoiceNos: string[] = [];
   try {
-    for (const item of preparedInvoices) {
+    for (const [index, item] of preparedInvoices.entries()) {
       const line = await insertLineWithFallback(
         header,
         item.invoice.invoiceno,
         item.trAmount,
         item.trChargeable,
         item.txChargeable,
+        index + 1,
       );
       lines.push(line);
     }

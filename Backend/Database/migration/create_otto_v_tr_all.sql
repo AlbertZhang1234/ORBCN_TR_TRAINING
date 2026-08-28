@@ -39,7 +39,8 @@ SELECT
   i.status AS invoice_status,
   i.comment AS invoice_comment,
   i.description AS invoice_description,
-  i.supplier AS invoice_supplier
+  i.supplier AS invoice_supplier,
+  t.seqno AS tr_seqno
 FROM otto_tr_h h
 LEFT JOIN otto_project p ON p.projectid = h.projectid
 LEFT JOIN otto_customer c ON c.customerid = p.customerid

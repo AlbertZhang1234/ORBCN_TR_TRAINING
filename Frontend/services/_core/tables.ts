@@ -3,6 +3,7 @@ export const TABLES = {
   project: 'otto_project',
   travelEntry: 'otto_travelentry',
   invoice: 'otto_invoices',
+  bookingRule: 'otto_booking_rule',
   reimbursementHeader: 'otto_tr_h',
   reimbursementLine: 'otto_tr_t',
   reimbursementReportView: 'otto_v_tr_all',

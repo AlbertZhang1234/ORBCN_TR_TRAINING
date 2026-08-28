@@ -50,6 +50,7 @@ export async function deleteTravelReimbursement(
         line.tr_amount,
         line.trchargeable,
         line.txchargeable,
+        line.seqno,
       ).catch(() => undefined);
     }
     throw err;
@@ -66,6 +67,7 @@ export async function deleteTravelReimbursement(
         line.tr_amount,
         line.trchargeable,
         line.txchargeable,
+        line.seqno,
       ).catch(() => undefined);
     }
     for (const invoiceNo of invoiceNos) {

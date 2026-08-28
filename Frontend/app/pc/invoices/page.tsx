@@ -25,6 +25,7 @@ import { deleteInvoice } from '../../../services/Invoice/delete';
 import { listUsers, type UserListRow } from '../../../services/User/list';
 import { listTravelEntries, type TravelEntryListRow } from '../../../services/TravelEntry/list';
 import { BusyStandardPage } from '../_components/TableLoadingMarquee';
+import { PcContentLayout } from '../_components/PcContentLayout';
 import type { VariantMetadata } from '@/components/Molecules/CVariantManagement';
 import { normalizeWorkflowStatus } from '../../../services/_core/locks';
 import { readStatus, statusLabel, toTrimmedString } from './_components/shared';
@@ -238,6 +239,12 @@ export default function InvoicesPage() {
           options: buildOptions(rows.map((row) => String(row.bookingcode ?? '').trim())),
         },
         {
+          id: 'businesstype',
+          label: t('business_type', 'Business Type'),
+          type: 'multi-select',
+          options: buildOptions(rows.map((row) => String(row.businesstype ?? '03').trim())),
+        },
+        {
           id: 'status',
           label: t('status', 'Status'),
           type: 'multi-select',
@@ -265,6 +272,7 @@ export default function InvoicesPage() {
     const userFilters = readMultiFilterValues(appliedFilters.userid?.value);
     const travelFilters = readMultiFilterValues(appliedFilters.travelid?.value);
     const bookingCodeFilters = readMultiFilterValues(appliedFilters.bookingcode?.value);
+    const businessTypeFilters = readMultiFilterValues(appliedFilters.businesstype?.value);
     const statusFilters = readMultiFilterValues(appliedFilters.status?.value);
 
     return normalizedRows.filter((row) => {
@@ -283,6 +291,10 @@ export default function InvoicesPage() {
         return false;
       }
       if (bookingCodeFilters.length > 0 && !bookingCodeFilters.includes(bookingCode)) {
+        return false;
+      }
+      const businessType = String(row.businesstype ?? '03').trim().toLowerCase();
+      if (businessTypeFilters.length > 0 && !businessTypeFilters.includes(businessType)) {
         return false;
       }
       if (statusFilters.length > 0 && !statusFilters.includes(status)) {
@@ -323,6 +335,7 @@ export default function InvoicesPage() {
       { id: 'description', label: t('description', 'Description'), minWidth: 220 },
       { id: 'comment', label: t('comment', 'Comment'), minWidth: 220 },
       { id: 'bookingcode', label: t('booking_rule', 'Booking Rule'), minWidth: 170 },
+      { id: 'businesstype', label: t('business_type', 'Business Type'), minWidth: 150 },
       {
         id: 'invoicedate',
         label: t('invoice_date', 'Invoice Date'),
@@ -449,15 +462,7 @@ export default function InvoicesPage() {
   }
 
   return (
-    <CAppPageLayout
-      appTitle={t('invoices', 'Invoice Management')}
-      menuData={menuData}
-      logo={<HeaderLogo />}
-      user={headerUser}
-      locale={lang}
-      onLocaleChange={(l) => changeLanguage(l as any)}
-      localeOptions={['en', 'zh']}
-      onUserLogout={() => void performClientLogout({ router, replace: true })}
+    <PcContentLayout
       contentSx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
     >
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -509,6 +514,7 @@ export default function InvoicesPage() {
         userOptions={userOptions}
         travelOptions={travelOptions}
         t={t}
+        lang={lang}
         onOpenImport={() => {
           setCreateOpen(false);
           setImportOpen(true);
@@ -525,6 +531,7 @@ export default function InvoicesPage() {
         userOptions={userOptions}
         travelOptions={travelOptions}
         t={t}
+        lang={lang}
         initialData={editingRow}
       />
 
@@ -537,6 +544,7 @@ export default function InvoicesPage() {
         userOptions={userOptions}
         travelOptions={travelOptions}
         t={t}
+        lang={lang}
         defaultUserId={sessionUser.userid}
         existingInvoiceNoSet={existingInvoiceNoSet}
       />
@@ -548,6 +556,6 @@ export default function InvoicesPage() {
         t={t}
       />
       {messageBox}
-    </CAppPageLayout>
+    </PcContentLayout>
   );
 }

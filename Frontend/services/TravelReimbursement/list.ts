@@ -62,6 +62,7 @@ export async function listReimbursementLines(
 
 export interface ReimbursementInvoiceDetailRow extends Record<string, unknown> {
   invoiceno: string;
+  seqno?: number;
   supplier?: string;
   description?: string;
   comment?: string;
@@ -95,6 +96,7 @@ export async function listReimbursementInvoiceDetails(
     const row = invoiceMap.get(invoiceNo);
     return {
       invoiceno: invoiceNo,
+      seqno: line.seqno,
       supplier: String(row?.supplier ?? ''),
       description: String(row?.description ?? ''),
       comment: String(row?.comment ?? ''),

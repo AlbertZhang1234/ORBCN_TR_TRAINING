@@ -70,6 +70,7 @@ const ALLOWED_TABLES = new Set([
   'otto_project',
   'otto_travelentry',
   'otto_invoices',
+  'otto_booking_rule',
   'otto_tr_h',
   'otto_tr_t',
   'otto_v_tr_all',
@@ -134,6 +135,24 @@ function normalizeRecordPayload(record: Record<string, unknown>): Record<string,
   for (const [key, value] of Object.entries(record)) {
     normalized[normalizeIdentifier(key, 'payload field')] = value;
   }
+  return normalized;
+}
+
+function normalizeDatabasePayload(
+  table: string,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const normalized = normalizeRecordPayload(payload);
+
+  // pg treats JavaScript arrays as PostgreSQL arrays. The booking rule
+  // keywords column is JSONB, so send an explicit JSON representation.
+  if (table === 'otto_booking_rule' && 'keywords' in normalized) {
+    const keywords = normalized.keywords;
+    if (Array.isArray(keywords) || (keywords && typeof keywords === 'object')) {
+      normalized.keywords = JSON.stringify(keywords);
+    }
+  }
+
   return normalized;
 }
 
@@ -369,7 +388,7 @@ async function supabaseWrite<T = Record<string, unknown>>(
   filters?: EqFilters,
 ): Promise<T[]> {
   if (method === 'POST') {
-    const payload = normalizeRecordPayload(body as Record<string, unknown>);
+    const payload = normalizeDatabasePayload(table, body as Record<string, unknown>);
     const keys = Object.keys(payload);
     const values = Object.values(payload);
     const placeholders = values.map((_, i) => `$${i + 1}`);
@@ -378,7 +397,7 @@ async function supabaseWrite<T = Record<string, unknown>>(
   }
 
   if (method === 'PATCH') {
-    const patch = normalizeRecordPayload(body as Record<string, unknown>);
+    const patch = normalizeDatabasePayload(table, body as Record<string, unknown>);
     const keys = Object.keys(patch);
     if (keys.length === 0) return []; // Nothing to update
 
@@ -505,6 +524,10 @@ function assertTableCategoryAccess(
 
   if ((table === 'otto_role' || table === 'otto_userrole') && !ctx.permissions.isAdmin) {
     return forbidden('Only admin can access roles');
+  }
+
+  if (table === 'otto_booking_rule' && action !== 'select' && !ctx.permissions.isAdmin) {
+    return forbidden('Only admin can modify booking rules');
   }
 
   if (table === 'otto_user' && action !== 'select' && !ctx.permissions.isAdmin) {

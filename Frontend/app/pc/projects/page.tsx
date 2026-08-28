@@ -37,6 +37,7 @@ import { listUsers, type UserListRow } from '../../../services/User/list';
 import { listCustomers, type CustomerListRow } from '../../../services/Customer/list';
 import { BusyStandardPage } from '../_components/TableLoadingMarquee';
 import type { VariantMetadata } from '@/components/Molecules/CVariantManagement';
+import { PcContentLayout } from '../_components/PcContentLayout';
 
 const defaultFilters: Record<string, FilterValue> = {
   projectid: { value: '', operator: 'contains' },
@@ -507,15 +508,7 @@ export default function ProjectsPage() {
   const tableBusy = loading || saving;
 
   return (
-    <CAppPageLayout
-      appTitle={t('projects', 'Project Management')}
-      menuData={menuData}
-      logo={<HeaderLogo />}
-      user={headerUser}
-      locale={lang}
-      onLocaleChange={(l) => changeLanguage(l as any)}
-      localeOptions={['en', 'zh']}
-      onUserLogout={() => void performClientLogout({ router, replace: true })}
+    <PcContentLayout
       contentSx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
     >
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -752,6 +745,6 @@ export default function ProjectsPage() {
         </DialogActions>
       </Dialog>
       {messageBox}
-    </CAppPageLayout>
+    </PcContentLayout>
   );
 }

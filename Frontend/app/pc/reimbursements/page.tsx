@@ -27,6 +27,7 @@ import { openReimbursementDetail, toFilter } from './helpers';
 import { groupReportRowsToReimbursements } from './reportView';
 import ReimbursementList from './ReimbursementList';
 import ReimbursementEditor from './ReimbursementEditor';
+import { PcContentLayout } from '../_components/PcContentLayout';
 
 type EditMode = 'create' | 'edit';
 const REIMBURSEMENT_PREFILL_STORAGE_KEY = 'pc_reimbursement_create_prefill';
@@ -237,15 +238,7 @@ export default function ReimbursementsPage() {
   }
 
   return (
-    <CAppPageLayout
-      appTitle={t('reimbursements', 'Reimbursement Management')}
-      menuData={menuData}
-      logo={<HeaderLogo />}
-      user={headerUser}
-      locale={lang}
-      onLocaleChange={(l) => changeLanguage(l as any)}
-      localeOptions={['en', 'zh']}
-      onUserLogout={() => void performClientLogout({ router, replace: true })}
+    <PcContentLayout
       contentSx={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}
     >
       <Box sx={{ position: 'relative', width: '100%', flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -294,6 +287,6 @@ export default function ReimbursementsPage() {
         }}
       />
       {messageBox}
-    </CAppPageLayout>
+    </PcContentLayout>
   );
 }

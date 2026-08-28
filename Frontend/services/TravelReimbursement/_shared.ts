@@ -12,6 +12,7 @@ export interface ReimbursementHeader extends Record<string, unknown> {
 export interface ReimbursementLine extends Record<string, unknown> {
   id?: number;
   invoiceno: string;
+  seqno: number;
   tr_amount?: string;
   trchargeable?: boolean;
   txchargeable?: boolean;
@@ -27,6 +28,38 @@ export interface ReimbursementLineInput {
 export interface ReimbursementFilter {
   id?: number;
   trno?: string;
+}
+
+interface InvoiceSaveCurrencyRecord {
+  currency?: unknown;
+}
+
+/**
+ * Return the currency in which an invoice amount is stored.
+ * `originalcurrency` is deliberately not considered here.
+ */
+export function readInvoiceSaveCurrency(invoice?: InvoiceSaveCurrencyRecord): string {
+  return String(invoice?.currency ?? 'CNY').trim().toUpperCase() || 'CNY';
+}
+
+export function assertInvoiceSaveCurrencyConsistency(
+  invoices: InvoiceSaveCurrencyRecord[],
+): void {
+  const currencies = new Set<string>();
+  for (const invoice of invoices) {
+    const currency = readInvoiceSaveCurrency(invoice);
+    currencies.add(currency);
+  }
+
+  if (currencies.size > 1) {
+    throw new ServiceError(
+      'Invoices with different save currencies cannot be submitted in one reimbursement.',
+      {
+        code: 'mixed_save_currency_not_allowed',
+        details: { currencies: Array.from(currencies) },
+      },
+    );
+  }
 }
 
 export function getHeaderFilter(filter: ReimbursementFilter): Record<string, string | number> {
@@ -57,12 +90,21 @@ export function buildLinePayloadCandidates(
   trAmount?: string | number | null,
   trChargeable?: boolean | string | number | null,
   txChargeable?: boolean | string | number | null,
+  seqNo?: number,
 ): Array<Record<string, unknown>> {
   const headerId = Number(header.id);
   if (!Number.isFinite(headerId)) {
     throw new ServiceError('Reimbursement header id is required to insert line items');
   }
-  const payload: Record<string, unknown> = { id: headerId, invoiceno: invoiceNo };
+  const normalizedSeqNo = Number(seqNo);
+  if (!Number.isInteger(normalizedSeqNo) || normalizedSeqNo < 1) {
+    throw new ServiceError('Reimbursement line seqno must be a positive integer');
+  }
+  const payload: Record<string, unknown> = {
+    id: headerId,
+    invoiceno: invoiceNo,
+    seqno: normalizedSeqNo,
+  };
   const normalizedAmount = normalizeLineAmount(trAmount);
   if (normalizedAmount !== undefined) {
     payload.tr_amount = normalizedAmount;
@@ -84,6 +126,7 @@ export async function insertLineWithFallback(
   trAmount?: string | number | null,
   trChargeable?: boolean | string | number | null,
   txChargeable?: boolean | string | number | null,
+  seqNo?: number,
 ): Promise<ReimbursementLine> {
   const payloads = buildLinePayloadCandidates(
     header,
@@ -91,6 +134,7 @@ export async function insertLineWithFallback(
     trAmount,
     trChargeable,
     txChargeable,
+    seqNo,
   );
 
   for (const payload of payloads) {
@@ -164,18 +208,20 @@ export async function getLineRowsByHeader(
   }
 
   const rows = await selectRows<ReimbursementLine>(TABLES.reimbursementLine, {
-    select: 'invoiceno,tr_amount,trchargeable,txchargeable',
+    select: 'invoiceno,seqno,tr_amount,trchargeable,txchargeable',
     filters: { id: headerId },
+    orderBy: { column: 'seqno', ascending: true },
   });
 
   return rows
     .map((row) => ({
       invoiceno: String(row.invoiceno ?? '').trim(),
+      seqno: Number(row.seqno),
       tr_amount: normalizeLineAmount(row.tr_amount),
       trchargeable: normalizeChargeableFlag(row.trchargeable),
       txchargeable: normalizeChargeableFlag(row.txchargeable),
     }))
-    .filter((row) => row.invoiceno.length > 0);
+    .filter((row) => row.invoiceno.length > 0 && Number.isInteger(row.seqno) && row.seqno > 0);
 }
 
 export async function getLineInvoicesByHeader(

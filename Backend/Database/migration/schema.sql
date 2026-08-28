@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS otto_user (
     "lastname" TEXT,
     "mobile" TEXT,
     "password" TEXT,
+    "sap_supplier_id" VARCHAR(10),
     PRIMARY KEY ("userid")
 );
 
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS otto_invoices (
     "taxamount" NUMERIC,
     "grossamount" NUMERIC,
     "bookingcode" TEXT,
+    "businesstype" TEXT NOT NULL DEFAULT '03' CHECK ("businesstype" IN ('01', '02', '03')),
     "currency" TEXT,
     "originalamount" NUMERIC,
     "originalcurrency" TEXT,
@@ -66,6 +68,21 @@ CREATE TABLE IF NOT EXISTS otto_invoices (
     "description" TEXT,
     "supplier" TEXT,
     PRIMARY KEY ("invoiceno")
+);
+
+CREATE TABLE IF NOT EXISTS otto_booking_rule (
+    "code" TEXT PRIMARY KEY,
+    "category" TEXT NOT NULL,
+    "name_zh" TEXT NOT NULL,
+    "name_en" TEXT,
+    "description" TEXT,
+    "keywords" JSONB NOT NULL DEFAULT '[]'::jsonb,
+    "costcenter" TEXT,
+    "accountingsubject" TEXT,
+    "sort_order" INTEGER NOT NULL DEFAULT 0,
+    "is_active" BOOLEAN NOT NULL DEFAULT TRUE,
+    "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS otto_tr_h (
@@ -83,10 +100,12 @@ CREATE TABLE IF NOT EXISTS otto_tr_h (
 CREATE TABLE IF NOT EXISTS otto_tr_t (
     "id" BIGINT,
     "invoiceno" TEXT,
+    "seqno" INTEGER NOT NULL,
     "tr_amount" TEXT,
     "trchargeable" BOOLEAN,
     "txchargeable" BOOLEAN,
-    PRIMARY KEY ("id", "invoiceno")
+    PRIMARY KEY ("id", "invoiceno"),
+    UNIQUE ("id", "seqno")
 );
 
 CREATE TABLE IF NOT EXISTS otto_userrole (
@@ -136,6 +155,7 @@ ALTER TABLE otto_tr_t ADD COLUMN IF NOT EXISTS trchargeable BOOLEAN;
 ALTER TABLE otto_tr_t ADD COLUMN IF NOT EXISTS txchargeable BOOLEAN;
 ALTER TABLE otto_invoices ADD COLUMN IF NOT EXISTS originalamount NUMERIC;
 ALTER TABLE otto_invoices ADD COLUMN IF NOT EXISTS originalcurrency TEXT;
+ALTER TABLE otto_user ADD COLUMN IF NOT EXISTS sap_supplier_id VARCHAR(10);
 
 -- Reimbursement report all-in-one view
 CREATE OR REPLACE VIEW otto_v_tr_all AS
@@ -174,7 +194,8 @@ SELECT
   i.status AS invoice_status,
   i.comment AS invoice_comment,
   i.description AS invoice_description,
-  i.supplier AS invoice_supplier
+  i.supplier AS invoice_supplier,
+  t.seqno AS tr_seqno
 FROM otto_tr_h h
 LEFT JOIN otto_project p ON p.projectid = h.projectid
 LEFT JOIN otto_customer c ON c.customerid = p.customerid

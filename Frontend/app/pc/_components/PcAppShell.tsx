@@ -52,6 +52,15 @@ function resolveTitle(pathname: string | null, t: (key: string, fallback: string
   return t('home', 'Home');
 }
 
+function isStandaloneDetailRoute(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return (
+    pathname === '/pc/tr-booking/detail' ||
+    pathname === '/pc/reimbursements/detail' ||
+    pathname === '/pc/approve/detail'
+  );
+}
+
 export function PcAppShell({ children }: PropsWithChildren) {
   const router = useRouter();
   const pathname = usePathname();
@@ -64,6 +73,7 @@ export function PcAppShell({ children }: PropsWithChildren) {
   ));
   const { t, lang, changeLanguage } = usePcI18n();
   const { mode, toggleMode } = usePcColorMode();
+  const hideNavigation = isStandaloneDetailRoute(pathname);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const searchHandlerRef = useRef<HeaderSearchHandler>(null);
   const registerSearchHandler = useCallback((handler: HeaderSearchHandler) => {
@@ -128,12 +138,14 @@ export function PcAppShell({ children }: PropsWithChildren) {
           onUserLogout={() => void performClientLogout({ router, replace: true })}
         />
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
-          <Box sx={{ p: 1.5, display: 'flex', alignItems: 'flex-start', flexShrink: 0 }}>
-            <NavigationIsland
-              {...navigationIslandProps}
-            colorMode={mode}
-            />
-          </Box>
+          {!hideNavigation ? (
+            <Box sx={{ p: 1.5, display: 'flex', alignItems: 'flex-start', flexShrink: 0 }}>
+              <NavigationIsland
+                {...navigationIslandProps}
+                colorMode={mode}
+              />
+            </Box>
+          ) : null}
           <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto', p: 1.5 }}>
             {children}
           </Box>

@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import tempfile
+from urllib.request import Request, urlopen
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -156,11 +157,106 @@ def _build_booking_rule_prompt(rules: list[dict[str, Any]]) -> str:
 
 
 def _parse_model_json(raw: str) -> dict[str, Any]:
-    text = raw.strip()
+    if isinstance(raw, list):
+        parts = []
+        for item in raw:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                parts.append(str(item.get("text", "")))
+        raw = "".join(parts)
+    text = str(raw or "").strip()
     if text.startswith("```"):
         text = text.strip("`")
         text = text.replace("json", "", 1).strip()
     return json.loads(text)
+
+
+def _invoke_openai_compatible_chat(
+    *,
+    base_url: str | None,
+    api_key: str | None,
+    model: str,
+    messages: list[dict[str, Any]],
+    temperature: float,
+) -> str:
+    if not base_url:
+        raise ExtractionError("LLM base URL is not configured")
+
+    endpoint = f"{base_url.rstrip('/')}/chat/completions"
+    request = Request(
+        endpoint,
+        data=json.dumps(
+            {
+                "model": model,
+                "temperature": temperature,
+                "messages": messages,
+            },
+            ensure_ascii=False,
+        ).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key or ''}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urlopen(request, timeout=120) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+
+    if not isinstance(payload, dict):
+        raise ExtractionError("LLM returned a non-object response")
+    if payload.get("error"):
+        raise ExtractionError(str(payload["error"]))
+
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ExtractionError("LLM response has no choices")
+    message = choices[0].get("message", {})
+    content = message.get("content") if isinstance(message, dict) else ""
+    if isinstance(content, list):
+        return "".join(
+            item if isinstance(item, str) else str(item.get("text", ""))
+            for item in content
+            if isinstance(item, (str, dict))
+        )
+    return str(content or "")
+
+
+def _build_llm_result(
+    parsed: dict[str, Any],
+    raw: str,
+    text_content: str,
+    allowed_codes: list[str],
+) -> InvoiceExtractionResult:
+    invoice_number = str(parsed.get("invoice_number", "") or "")
+    amount_excl_tax = _to_float(parsed.get("amount_excl_tax"))
+    tax_amount = _to_float(parsed.get("tax_amount"))
+    amount_incl_tax = _to_float(parsed.get("amount_incl_tax"))
+
+    # Receipts normally have no VAT fields; the final charged amount is the
+    # usable total and should be visible in both amount columns.
+    if not invoice_number.strip() and tax_amount is None and amount_incl_tax is not None:
+        amount_excl_tax = amount_excl_tax if amount_excl_tax is not None else amount_incl_tax
+
+    return InvoiceExtractionResult(
+        category_code=_normalize_code(str(parsed.get("category_code", "SOBE")), allowed_codes),
+        confidence=max(0.0, min(1.0, _to_float(parsed.get("confidence")) or 0.2)),
+        reason=str(parsed.get("reason", "模型未提供原因") or "模型未提供原因"),
+        remark=str(parsed.get("remark", "") or "").strip() or _extract_invoice_remark(text_content),
+        invoice_number=invoice_number,
+        issue_date=str(parsed.get("issue_date", "") or ""),
+        buyer_name=str(parsed.get("buyer_name", "") or ""),
+        buyer_tax_no=str(parsed.get("buyer_tax_no", "") or ""),
+        seller_name=str(parsed.get("seller_name", "") or ""),
+        seller_tax_no=str(parsed.get("seller_tax_no", "") or ""),
+        currency=_normalize_currency(parsed.get("currency")) or _extract_currency(text_content),
+        amount_excl_tax=amount_excl_tax,
+        tax_amount=tax_amount,
+        amount_incl_tax=amount_incl_tax,
+        line_items=_parse_line_items(parsed.get("line_items")),
+        raw_model_output=raw,
+        fallback_used=False,
+    )
 
 
 def _to_float(value: Any) -> float | None:
@@ -433,9 +529,12 @@ def process_invoice(
     }
 
     format_instruction = (
-        "你必须基于发票图片内容进行全要素提取和智能分类。"
+        "你必须基于发票或收据图片内容进行全要素提取和智能分类。"
         f"可用category_code仅限: {', '.join(allowed_codes)}。\n"
         "请仔细提取所有字段，特别是金额、日期和购买方/销售方信息。\n"
+        "如果是订单收据或付款凭证，没有税额时请将最终实际支付金额填入amount_incl_tax；"
+        "优先使用Order Total、Payment Total、Total Paid、Amount Paid等最终支付金额，"
+        "不要把折扣前小计误当成最终金额。\n"
         "必须识别票据原始币种并输出currency。中文人民币发票输出CNY；欧元输出EUR；美元输出USD；日元输出JPY；德语、法语、英语、日语票据也必须识别币种。\n"
         "amount_excl_tax、tax_amount、amount_incl_tax必须保持票据原始币种金额，不要自行换算成人民币。\n"
         "如果字段缺失或无法识别，请返回null或空字符串。\n"
@@ -443,11 +542,10 @@ def process_invoice(
         f"JSON结构: {json.dumps(response_schema, ensure_ascii=False)}"
     )
 
+    # Construct multimodal message once so both the LangChain path and the
+    # raw OpenAI-compatible retry use exactly the same image payload.
+    content_parts = []
     try:
-        llm = ChatOpenAI(model=model, temperature=temperature, base_url=base_url, api_key=api_key)
-        
-        # Construct multimodal message
-        content_parts = []
         content_parts.append({"type": "text", "text": format_instruction})
         
         images = content_data.get("images", [])
@@ -480,35 +578,78 @@ def process_invoice(
             SystemMessage(content=prompt_content),
             HumanMessage(content=content_parts),
         ]
-        
+
+        messages_payload = [
+            {"role": "system", "content": prompt_content},
+            {"role": "user", "content": content_parts},
+        ]
+
+        llm = ChatOpenAI(model=model, temperature=temperature, base_url=base_url, api_key=api_key)
         raw = llm.invoke(message).content
         parsed = _parse_model_json(raw)
-        
-        # Use text fallback for rule-based extraction if LLM fails or for remark extraction fallback
-        text_content = content_data.get("text_fallback", "")
 
-        return InvoiceExtractionResult(
-            category_code=_normalize_code(str(parsed.get("category_code", "SOBE")), allowed_codes),
-            confidence=max(0.0, min(1.0, _to_float(parsed.get("confidence")) or 0.2)),
-            reason=str(parsed.get("reason", "模型未提供原因") or "模型未提供原因"),
-            remark=str(parsed.get("remark", "") or "").strip() or _extract_invoice_remark(text_content),
-            invoice_number=str(parsed.get("invoice_number", "") or ""),
-            issue_date=str(parsed.get("issue_date", "") or ""),
-            buyer_name=str(parsed.get("buyer_name", "") or ""),
-            buyer_tax_no=str(parsed.get("buyer_tax_no", "") or ""),
-            seller_name=str(parsed.get("seller_name", "") or ""),
-            seller_tax_no=str(parsed.get("seller_tax_no", "") or ""),
-            currency=_normalize_currency(parsed.get("currency")) or _extract_currency(text_content),
-            amount_excl_tax=_to_float(parsed.get("amount_excl_tax")),
-            tax_amount=_to_float(parsed.get("tax_amount")),
-            amount_incl_tax=_to_float(parsed.get("amount_incl_tax")),
-            line_items=_parse_line_items(parsed.get("line_items")),
-            raw_model_output=raw,
-            fallback_used=False,
+        text_content = content_data.get("text_fallback", "")
+        amount_incl_tax = _to_float(parsed.get("amount_incl_tax"))
+
+        # Some OpenAI-compatible gateways return a valid HTTP response that
+        # LangChain cannot decode consistently. A small raw-JSON retry also
+        # repairs occasional omissions of receipt totals.
+        if amount_incl_tax is None:
+            amount_retry_prompt = (
+                "只从这张发票或订单收据中提取最终金额。返回JSON，不要解释，结构为："
+                '{"currency":"ISO三位币种","amount_excl_tax":number或null,'
+                '"tax_amount":number或null,"amount_incl_tax":number或null}。'
+                "优先读取Order Total、Payment Total、Total Paid、Amount Paid或价税合计；"
+                "如果是无税收据，将最终实际支付金额填入amount_incl_tax。"
+            )
+            retry_messages = [
+                {"role": "user", "content": [
+                    {"type": "text", "text": amount_retry_prompt},
+                    *[part for part in content_parts if part.get("type") == "image_url"],
+                ]},
+            ]
+            try:
+                retry_raw = _invoke_openai_compatible_chat(
+                    base_url=base_url,
+                    api_key=api_key,
+                    model=model,
+                    messages=retry_messages,
+                    temperature=0,
+                )
+                retry_parsed = _parse_model_json(retry_raw)
+                for key in ("currency", "amount_excl_tax", "tax_amount", "amount_incl_tax"):
+                    if parsed.get(key) in (None, "") and retry_parsed.get(key) not in (None, ""):
+                        parsed[key] = retry_parsed[key]
+                raw = f"{raw}\namount_retry: {retry_raw}"
+            except Exception as retry_exc:
+                logger.info("Receipt amount retry failed: %s", retry_exc)
+
+        return _build_llm_result(
+            parsed=parsed,
+            raw=raw,
+            text_content=text_content,
+            allowed_codes=allowed_codes,
         )
     except Exception as exc:
         logger.warning("LLM extract failed, fallback to rule-based: %s", exc)
         text_content = content_data.get("text_fallback", "")
+        try:
+            raw = _invoke_openai_compatible_chat(
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                messages=messages_payload,
+                temperature=temperature,
+            )
+            parsed = _parse_model_json(raw)
+            return _build_llm_result(
+                parsed=parsed,
+                raw=raw,
+                text_content=text_content,
+                allowed_codes=allowed_codes,
+            )
+        except Exception as retry_exc:
+            logger.warning("Raw JSON LLM retry failed, using rule-based fallback: %s", retry_exc)
         result = _rule_based_extract(text_content, normalized_rules)
         result.raw_model_output = f"llm_error: {exc}"
         return result

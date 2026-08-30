@@ -49,6 +49,35 @@ function headersToRecord(headers: Headers): Record<string, string> {
   return Object.fromEntries(headers.entries());
 }
 
+function formatTransportError(error: unknown, url: string): string {
+  const cause =
+    error && typeof error === 'object' && 'cause' in error
+      ? (error as { cause?: { code?: string } }).cause
+      : undefined;
+  const code = String(cause?.code ?? '').toUpperCase();
+  let host = url;
+  try {
+    host = new URL(url).host;
+  } catch {
+    // Keep the original URL when it is not a valid absolute URL.
+  }
+
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') {
+    return `Cannot resolve SAP host ${host}. Check VPN/DNS or SAP_ODATA_BASE_URL.`;
+  }
+  if (code === 'ECONNREFUSED') {
+    return `SAP host ${host} refused the connection. Check the SAP service or network access.`;
+  }
+  if (code === 'ETIMEDOUT' || code === 'UND_ERR_CONNECT_TIMEOUT') {
+    return `Connection to SAP host ${host} timed out. Check VPN, proxy, or network access.`;
+  }
+  if (error instanceof Error && error.name === 'AbortError') {
+    return `Connection to SAP host ${host} timed out. Check VPN, proxy, or network access.`;
+  }
+
+  return error instanceof Error ? error.message : String(error);
+}
+
 function createAbortSignal(timeoutMs: number, callerSignal?: AbortSignal): {
   signal: AbortSignal;
   cleanup: () => void;
@@ -208,7 +237,7 @@ export class SapODataClient {
       if (error instanceof SapODataError) {
         throw error;
       }
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatTransportError(error, url);
       throw new SapODataError(`SAP CSRF token request failed: ${message}`, {
         code: 'SAP_ODATA_CSRF_REQUEST_FAILED',
         requestId: options.requestId,
@@ -316,7 +345,7 @@ export class SapODataClient {
         throw error;
       }
 
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatTransportError(error, url);
       this.logger.error?.('SAP OData request exception', context);
       throw new SapODataError(`SAP OData request failed: ${message}`, {
         code: 'SAP_ODATA_REQUEST_FAILED',

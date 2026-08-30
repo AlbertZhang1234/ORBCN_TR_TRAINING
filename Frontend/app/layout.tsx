@@ -11,8 +11,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: PropsWithChildren) {
   return (
-    <html lang="en">
-      <body style={{ margin: 0, minHeight: '100vh' }}>
+    <html lang="en" suppressHydrationWarning>
+      <body style={{ margin: 0, minHeight: '100vh' }} suppressHydrationWarning>
         <GlobalLogoutBridge />
         {children}
       </body>

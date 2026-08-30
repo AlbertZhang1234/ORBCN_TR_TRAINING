@@ -28,7 +28,7 @@ import { BusyStandardPage } from '../_components/TableLoadingMarquee';
 import { PcContentLayout } from '../_components/PcContentLayout';
 import type { VariantMetadata } from '@/components/Molecules/CVariantManagement';
 import { normalizeWorkflowStatus } from '../../../services/_core/locks';
-import { readStatus, statusLabel, toTrimmedString } from './_components/shared';
+import { formatDateOnly, readStatus, statusLabel, toTrimmedString } from './_components/shared';
 import InvoiceCreateDialog from './_components/InvoiceCreateDialog';
 import InvoiceEditDialog from './_components/InvoiceEditDialog';
 import InvoiceImportDialog from './_components/InvoiceImportDialog';
@@ -48,22 +48,6 @@ function readMultiFilterValues(value: unknown): string[] {
   }
   const single = String(value ?? '').trim().toLowerCase();
   return single ? [single] : [];
-}
-
-function formatDateOnly(value: unknown): string {
-  const text = String(value ?? '').trim();
-  if (!text) {
-    return '';
-  }
-  const isoDateMatch = text.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (isoDateMatch?.[1]) {
-    return isoDateMatch[1];
-  }
-  const ts = Date.parse(text);
-  if (Number.isFinite(ts)) {
-    return new Date(ts).toISOString().slice(0, 10);
-  }
-  return text;
 }
 
 export default function InvoicesPage() {

@@ -31,8 +31,10 @@ import type { SessionUser } from '../_components/session';
 import {
   toFilter,
   readInvoiceAmountText,
+  readInvoiceOriginalAmountText,
   readInvoiceStatus,
   readInvoiceOriginalCurrency,
+  readInvoiceCurrency,
   isInvoiceLockedForSelection,
   type SelectableInvoiceRow,
 } from './helpers';
@@ -257,6 +259,8 @@ export default function ReimbursementEditor({
         invoiceno: invoiceNo,
         description: String(invoice.description ?? ''),
         amount: readInvoiceAmountText(invoice),
+        currency: readInvoiceCurrency(invoice),
+        originalamount: readInvoiceOriginalAmountText(invoice),
         originalcurrency: readInvoiceOriginalCurrency(invoice),
         travelid: travelId,
         projectid: resolvedProject || currentProject,
@@ -293,6 +297,8 @@ export default function ReimbursementEditor({
         invoiceno: invoiceNo,
         description: String(invoice?.description ?? ''),
         amount: invoiceAmount,
+        currency: readInvoiceCurrency(invoice),
+        originalamount: readInvoiceOriginalAmountText(invoice),
         tr_amount: trAmount,
         trchargeable: trChargeable,
         txchargeable: txChargeable,
@@ -488,7 +494,9 @@ export default function ReimbursementEditor({
     () => [
       { id: 'invoiceno', label: t('invoice_no', 'Invoice No'), minWidth: 160 },
       { id: 'description', label: t('invoice_description', 'Invoice Description'), minWidth: 220 },
-      { id: 'amount', label: t('invoice_amount', 'Invoice Amount'), minWidth: 120 },
+      { id: 'amount', label: t('save_amount', 'Save Amount'), minWidth: 120 },
+      { id: 'currency', label: t('save_currency', 'Save Currency'), minWidth: 120 },
+      { id: 'originalamount', label: t('original_amount', 'Original Amount'), minWidth: 140 },
       { id: 'originalcurrency', label: t('original_currency', 'Original Currency'), minWidth: 140 },
       { id: 'travelid', label: t('travel_id', 'Travel ID'), minWidth: 140 },
     ],
@@ -523,6 +531,10 @@ export default function ReimbursementEditor({
           />
         ),
       },
+      { id: 'currency', label: t('save_currency', 'Save Currency'), minWidth: 120 },
+      { id: 'amount', label: t('save_amount', 'Save Amount'), minWidth: 120 },
+      { id: 'originalamount', label: t('original_amount', 'Original Amount'), minWidth: 140 },
+      { id: 'originalcurrency', label: t('original_currency', 'Original Currency'), minWidth: 140 },
       {
         id: 'trchargeable',
         label: t('tr_chargeable', 'TR Chargeable'),
@@ -581,8 +593,6 @@ export default function ReimbursementEditor({
           </TextField>
         ),
       },
-      { id: 'amount', label: t('invoice_amount', 'Invoice Amount'), minWidth: 120 },
-      { id: 'originalcurrency', label: t('original_currency', 'Original Currency'), minWidth: 140 },
       { id: 'travelid', label: t('travel_id', 'Travel ID'), minWidth: 140 },
     ],
     [t],
@@ -736,6 +746,7 @@ export default function ReimbursementEditor({
                   columns={availableInvoiceColumns}
                   rows={availableInvoiceRows}
                   rowKey="invoiceno"
+                  tableKey="reimbursement_invoice_picker_available"
                   showToolbar={false}
                   rowsPerPage={Math.max(availableInvoiceRows.length, 1)}
                   fullWidth
@@ -812,6 +823,7 @@ export default function ReimbursementEditor({
                   columns={selectedInvoiceColumns}
                   rows={selectedInvoiceRows}
                   rowKey="invoiceno"
+                  tableKey="reimbursement_invoice_picker_selected"
                   showToolbar={false}
                   rowsPerPage={Math.max(selectedInvoiceRows.length, 1)}
                   fullWidth

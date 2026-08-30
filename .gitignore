@@ -31,6 +31,7 @@ Thumbs.db
 
 # Runtime artifacts
 .run/
+Frontend/data/
 old_db_dump.json
 
 # IDE

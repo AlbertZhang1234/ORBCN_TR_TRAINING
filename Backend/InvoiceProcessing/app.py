@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from service.classifier import process_invoice, load_prompt
 from service.config import settings
@@ -96,7 +97,8 @@ async def classify_invoice_endpoint(
         raise HTTPException(status_code=400, detail="booking_rules must contain active rules")
 
     prompt_content = load_prompt(settings.prompt_path)
-    result = process_invoice(
+    result = await run_in_threadpool(
+        process_invoice,
         file_bytes=data,
         filename=file.filename,
         prompt_content=prompt_content,

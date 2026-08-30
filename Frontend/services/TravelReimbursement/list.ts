@@ -75,6 +75,8 @@ export interface ReimbursementInvoiceDetailRow extends Record<string, unknown> {
   totalnetamount?: number;
   taxamount?: number;
   grossamount?: number;
+  originalamount?: number;
+  originalcurrency?: string;
   tr_amount?: string;
   trchargeable?: boolean;
   txchargeable?: boolean;
@@ -107,8 +109,10 @@ export async function listReimbursementInvoiceDetails(
       currency: String(row?.currency ?? ''),
       status: String(row?.status ?? ''),
       totalnetamount: parseAmount(row?.totalnetamount),
-      taxamount: parseAmount(row?.taxamount),
+      taxamount: parseInvoiceTaxAmount(invoiceNo, row?.taxamount),
       grossamount: parseAmount(row?.grossamount),
+      originalamount: parseAmount(row?.originalamount),
+      originalcurrency: String(row?.originalcurrency ?? ''),
       tr_amount: normalizeLineAmount(line.tr_amount),
       trchargeable: line.trchargeable,
       txchargeable: line.txchargeable,
@@ -127,4 +131,16 @@ function parseAmount(value: unknown): number | undefined {
     }
   }
   return undefined;
+}
+
+function isGeneratedReceiptInvoiceNo(invoiceNo: unknown): boolean {
+  return /(?:^|-)\d{8}-\d{3}$/.test(String(invoiceNo ?? '').trim());
+}
+
+function parseInvoiceTaxAmount(invoiceNo: unknown, value: unknown): number | undefined {
+  const amount = parseAmount(value);
+  if (amount !== undefined) {
+    return amount;
+  }
+  return isGeneratedReceiptInvoiceNo(invoiceNo) ? 0 : undefined;
 }

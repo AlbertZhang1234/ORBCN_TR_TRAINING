@@ -82,3 +82,28 @@ test('SAP OData write requests fetch and reuse CSRF token and cookies', async ()
     'SAP_SESSIONID_TEST=abc123',
   );
 });
+
+test('SAP CSRF errors explain DNS failures instead of returning generic fetch failed', async () => {
+  const fetchMock: typeof fetch = async () => {
+    const error = new Error('fetch failed') as Error & {
+      cause?: { code?: string };
+    };
+    error.cause = { code: 'ENOTFOUND' };
+    throw error;
+  };
+
+  const client = createSapODataClient({
+    baseUrl: 'https://sap.internal.example.com',
+    fetch: fetchMock,
+  });
+
+  await assert.rejects(
+    () =>
+      client.post(
+        SUPER_MIRO_RESOURCE,
+        SUPER_MIRO_RESOURCE.entitySet,
+        { Vatno: 'INV-DNS' },
+      ),
+    /Cannot resolve SAP host sap\.internal\.example\.com/,
+  );
+});

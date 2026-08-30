@@ -178,11 +178,22 @@ export default function InvoiceImportDialog({
 
       const failed = parsedDrafts.filter((x) => x.parseError).length;
       const success = parsedDrafts.length - failed;
+      const missingDateCount = parsedDrafts.filter(
+        (row) => !row.parseError && !toTrimmedString(row.raw?.issue_date),
+      ).length;
       setImportMessage(
         t('parsing_completed', 'Parsing completed: Success {0}, Failed {1}')
           .replace('{0}', String(success))
           .replace('{1}', String(failed))
       );
+      if (missingDateCount > 0) {
+        showWarning(
+          t(
+            'invoice_date_not_recognized_warning',
+            '{0} receipt(s) had no recognizable invoice date. The upload date was filled in by default. Please check and edit the Invoice Date before saving; generated receipt numbers will update with the date.',
+          ).replace('{0}', String(missingDateCount)),
+        );
+      }
     } finally {
       setImportParsing(false);
     }
@@ -394,6 +405,23 @@ export default function InvoiceImportDialog({
     [],
   );
 
+  const updateImportDraftDate = useCallback(
+    (rowId: string, value: string) => {
+      setImportRows((prev) =>
+        normalizeImportDrafts(
+          prev.map((row) =>
+            row.id === rowId
+              ? { ...row, payload: { ...row.payload, invoicedate: value } }
+              : row,
+          ),
+          existingInvoiceNoSet,
+          t,
+        ),
+      );
+    },
+    [existingInvoiceNoSet, t],
+  );
+
   const importStats = useMemo(() => {
     const skipped = importRows.filter((row) => row.skipReason).length;
     return {
@@ -480,7 +508,24 @@ export default function InvoiceImportDialog({
           businesstype: cell(row.payload.businesstype),
           userid: cell(row.payload.userid),
           travelid: cell(row.payload.travelid),
-          invoicedate: cell(row.payload.invoicedate),
+          invoicedate: row.generatedInvoiceNo ? (
+            <TextField
+              type="date"
+              value={toInputString(row.payload.invoicedate)}
+              onChange={(event) => updateImportDraftDate(row.id, event.target.value)}
+              size="small"
+              fullWidth
+              disabled={importParsing || savingImport}
+              required
+              InputLabelProps={{ shrink: true }}
+              sx={{
+                minWidth: 150,
+                '& .MuiInputBase-input': { fontSize: '0.82rem', py: 0.8 },
+              }}
+            />
+          ) : (
+            cell(row.payload.invoicedate)
+          ),
           totalnetamount: cell(row.payload.totalnetamount),
           taxamount: cell(row.payload.taxamount),
           grossamount: cell(row.payload.grossamount),
@@ -509,7 +554,16 @@ export default function InvoiceImportDialog({
             : <Typography component="span" sx={{ color: 'success.main', fontWeight: 700, fontSize: '0.82rem' }}>{t('ready_to_save', 'Ready to save')}</Typography>,
         };
       }),
-    [importRows, importParsing, savingImport, updateImportDraftPayload, bookingRuleOptions, lang, t],
+    [
+      importRows,
+      importParsing,
+      savingImport,
+      updateImportDraftPayload,
+      updateImportDraftDate,
+      bookingRuleOptions,
+      lang,
+      t,
+    ],
   );
 
   const importColumns = useMemo<any[]>(
@@ -550,13 +604,26 @@ export default function InvoiceImportDialog({
       PaperProps={{
         sx: {
           width: 'min(1400px, 96vw)',
-          height: '88vh',
+          height: 'min(88vh, 900px)',
+          maxHeight: 'calc(100vh - 32px)',
+          display: 'flex',
+          flexDirection: 'column',
         },
       }}
     >
-      <DialogTitle>{t('import_invoices_title', 'Bulk Import Invoices (PDF/Images)')}</DialogTitle>
-      <DialogContent sx={{ pt: 1, display: 'flex', flexDirection: 'column' }}>
-        <Stack spacing={2} sx={{ mt: 1, flex: 1, minHeight: 0 }}>
+      <DialogTitle sx={{ flexShrink: 0 }}>
+        {t('import_invoices_title', 'Bulk Import Invoices (PDF/Images)')}
+      </DialogTitle>
+      <DialogContent
+        sx={{
+          pt: 1,
+          flex: '1 1 auto',
+          minHeight: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+        }}
+      >
+        <Stack spacing={2} sx={{ mt: 1 }}>
           <Box
             sx={{
               border: importDragActive ? '2px dashed #1976d2' : '1px dashed rgba(25, 118, 210, 0.38)',
@@ -644,7 +711,16 @@ export default function InvoiceImportDialog({
             {importMessage ? `；${importMessage}` : ''}
           </Alert>
 
-          <Box sx={{ flex: 1, minHeight: 0, '& .MuiToolbar-root': { display: 'none' } }}>
+          <Box
+            sx={{
+              height: 'min(48vh, 520px)',
+              minHeight: 320,
+              flex: '0 0 auto',
+              minWidth: 0,
+              overflow: 'hidden',
+              '& .MuiToolbar-root': { display: 'none' },
+            }}
+          >
             <BusyTable
               appId="pc-invoices"
               busy={importParsing || savingImport}

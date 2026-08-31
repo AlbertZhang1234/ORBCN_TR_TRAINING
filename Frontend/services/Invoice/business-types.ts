@@ -3,7 +3,7 @@ export const DEFAULT_BUSINESS_TYPE = '03';
 export const BUSINESS_TYPE_OPTIONS = [
   { code: '01', labelKey: 'business_type_standard_purchase_invoice', label: 'Standard Purchase Invoice' },
   { code: '02', labelKey: 'business_type_freight_subsequent_debit', label: 'Freight/Subsequent Debit' },
-  { code: '03', labelKey: 'business_type_company_expenses', label: 'Company Expenses' },
+  { code: '03', labelKey: 'business_type_reimbursement', label: 'Reimbursement' },
 ] as const;
 
 export type BusinessTypeCode = (typeof BUSINESS_TYPE_OPTIONS)[number]['code'];

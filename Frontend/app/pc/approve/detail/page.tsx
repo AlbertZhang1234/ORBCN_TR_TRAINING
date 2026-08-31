@@ -115,6 +115,8 @@ export default function ApprovalDetailPopupPage() {
           totalnetamount: d.totalnetamount,
           taxamount: d.taxamount,
           grossamount: d.grossamount,
+          originalamount: d.originalamount,
+          originalcurrency: d.originalcurrency,
           // Store tr_amount if needed, though ReimbursementDetail might fetch it again via lines
         }));
 

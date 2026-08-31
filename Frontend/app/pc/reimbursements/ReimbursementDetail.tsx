@@ -8,6 +8,7 @@ import type { InvoiceListRow } from '../../../services/Invoice/list';
 import { toFilter, readInvoiceStatus } from './helpers';
 import { normalizeWorkflowStatus } from '../../../services/_core/locks';
 import InvoicePreviewDialog from '../invoices/_components/InvoicePreviewDialog';
+import { formatDateOnly } from '../invoices/_components/shared';
 
 function statusLabel(status: ReturnType<typeof normalizeWorkflowStatus>, t: (key: string, fallback: string) => string): string {
   if (status === 'WAIT FOR APPROVAL') {
@@ -188,7 +189,12 @@ export default function ReimbursementDetail({
         minWidth: 150,
         render: (value: unknown) => formatBoolean(value, t),
       },
-      { id: 'invoicedate', label: t('invoice_date', 'Invoice Date'), minWidth: 140 },
+      {
+        id: 'invoicedate',
+        label: t('invoice_date', 'Invoice Date'),
+        minWidth: 140,
+        render: (value: unknown) => formatDateOnly(value),
+      },
       { id: 'tr_amount', label: t('reimbursement_amount', 'Reimbursement Amount'), minWidth: 150, numeric: true, align: 'right' },
       { id: 'totalnetamount', label: t('net_amount', 'Net Amount'), minWidth: 130, numeric: true, align: 'right' },
       { id: 'taxamount', label: t('tax_amount', 'Tax Amount'), minWidth: 130, numeric: true, align: 'right' },

@@ -446,6 +446,8 @@ export default function ApprovePage() {
       { id: 'totalnetamount', label: t('net_amount', 'Net Amount'), minWidth: 120 },
       { id: 'taxamount', label: t('tax_amount', 'Tax Amount'), minWidth: 120 },
       { id: 'grossamount', label: t('gross_amount', 'Invoice Amount'), minWidth: 130 },
+      { id: 'originalamount', label: t('original_amount', 'Original Amount'), minWidth: 150 },
+      { id: 'originalcurrency', label: t('original_currency', 'Original Currency'), minWidth: 150 },
     ],
     [t],
   );

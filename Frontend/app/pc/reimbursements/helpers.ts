@@ -10,6 +10,8 @@ export interface SelectableInvoiceRow {
   invoiceno: string;
   description: string;
   amount: string;
+  currency: string;
+  originalamount: string;
   tr_amount?: string;
   trchargeable?: boolean;
   txchargeable?: boolean;
@@ -199,6 +201,18 @@ export function readInvoiceAmountText(invoice?: InvoiceListRow): string {
   return normalizeLineAmount(raw) ?? '';
 }
 
+export function readInvoiceOriginalAmountText(invoice?: InvoiceListRow): string {
+  if (!invoice) {
+    return '';
+  }
+  const raw = invoice.originalamount ?? invoice.grossamount ?? invoice.totalnetamount ?? '';
+  return normalizeLineAmount(raw) ?? '';
+}
+
 export function readInvoiceOriginalCurrency(invoice?: InvoiceListRow): string {
   return String(invoice?.originalcurrency ?? invoice?.currency ?? 'CNY').trim().toUpperCase() || 'CNY';
+}
+
+export function readInvoiceCurrency(invoice?: InvoiceListRow): string {
+  return String(invoice?.currency ?? invoice?.originalcurrency ?? 'CNY').trim().toUpperCase() || 'CNY';
 }

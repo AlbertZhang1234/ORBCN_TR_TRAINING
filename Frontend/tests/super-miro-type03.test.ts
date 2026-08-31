@@ -168,6 +168,46 @@ test('type 03 payload requires numeric reimbursement and tax amounts', () => {
   );
 });
 
+test('type 03 payload defaults missing receipt tax to zero', () => {
+  const [payload] = buildType03SuperMiroPayloads({
+    id: 112,
+    lines: [
+      {
+        seqno: 1,
+        invoiceNo: 'RECEIPT-20260829-001',
+        businessType: '03',
+        amount: 457.43,
+        grossAmount: 457.43,
+        taxAmount: null,
+      },
+    ],
+  });
+
+  assert.equal(payload.Tax, '0.00');
+  assert.equal(payload.SumTax, '0.00');
+  assert.equal(payload.SumNetwr, '457.43');
+});
+
+test('type 03 payload still requires tax for regular invoices', () => {
+  assert.throws(
+    () =>
+      buildType03SuperMiroPayloads({
+        id: 113,
+        lines: [
+          {
+            seqno: 1,
+            invoiceNo: 'INV-MISSING-TAX',
+            businessType: '03',
+            amount: 100,
+            grossAmount: 100,
+            taxAmount: null,
+          },
+        ],
+      }),
+    /Invoice tax amount is required/,
+  );
+});
+
 test('type 03 payload requires each invoice total amount', () => {
   assert.throws(
     () =>

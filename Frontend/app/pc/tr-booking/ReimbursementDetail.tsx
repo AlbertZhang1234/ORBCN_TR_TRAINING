@@ -253,6 +253,8 @@ export default function ReimbursementDetail({
       { id: 'taxamount', label: t('tax_amount', 'Tax Amount'), minWidth: 130, numeric: true, align: 'right' },
       { id: 'grossamount', label: t('gross_amount', 'Gross Amount'), minWidth: 130, numeric: true, align: 'right' },
       { id: 'currency', label: t('currency', 'Currency'), minWidth: 110 },
+      { id: 'originalamount', label: t('original_amount', 'Original Amount'), minWidth: 150, numeric: true, align: 'right' },
+      { id: 'originalcurrency', label: t('original_currency', 'Original Currency'), minWidth: 150 },
       { id: '_status', label: t('status', 'Status'), minWidth: 140 },
     ],
     [t],

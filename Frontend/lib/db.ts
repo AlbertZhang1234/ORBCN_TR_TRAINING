@@ -2,6 +2,10 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
+// PostgreSQL DATE is a calendar value, not a point in time. Keep it as
+// YYYY-MM-DD so JSON serialization cannot shift it across time zones.
+pg.types.setTypeParser(1082, (value) => value);
+
 let pool: pg.Pool | undefined;
 
 function normalizeDbError(error: unknown): Error {

@@ -28,6 +28,20 @@ function toRequiredAmount(value: unknown, field: string, invoiceNo: string): num
   return amount;
 }
 
+function isGeneratedReceiptInvoiceNo(invoiceNo: string): boolean {
+  return /(?:^|-)\d{8}-\d{3}$/.test(invoiceNo.trim());
+}
+
+function readTaxAmount(value: unknown, invoiceNo: string): number {
+  if (
+    (value === null || value === undefined || value === '') &&
+    isGeneratedReceiptInvoiceNo(invoiceNo)
+  ) {
+    return 0;
+  }
+  return toRequiredAmount(value, 'Invoice tax amount', invoiceNo);
+}
+
 function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
@@ -115,7 +129,7 @@ export function buildType03SuperMiroPayloads(
       line,
       amount: toRequiredAmount(line.amount, 'Reimbursement amount', invoiceNo),
       grossAmount: toRequiredAmount(line.grossAmount, 'Invoice total amount', invoiceNo),
-      taxAmount: toRequiredAmount(line.taxAmount, 'Invoice tax amount', invoiceNo),
+      taxAmount: readTaxAmount(line.taxAmount, invoiceNo),
     };
   });
 

@@ -13,19 +13,18 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import { BusyTable } from '../../_components/TableLoadingMarquee';
 import { parseInvoice, type InvoiceParseResult } from '../../../../services/Invoice/parse';
 import { saveInvoice } from '../../../../services/Invoice/save';
+import { saveRecognizedInvoiceLines } from '../../../../services/Invoice/lines';
+import { deleteInvoice } from '../../../../services/Invoice/delete';
 import { saveInvoiceSourceFile } from '../../../../services/Invoice/source';
 import type { InvoiceRecord } from '../../../../services/Invoice/_shared';
 import { listInvoices } from '../../../../services/Invoice/list';
 import { useBookingRuleOptions } from '../../../../services/Invoice/useBookingRuleOptions';
 import { formatBookingRuleOption } from '../../../../services/Invoice/booking-rules';
 import {
-  BUSINESS_TYPE_OPTIONS,
   DEFAULT_BUSINESS_TYPE,
-  formatBusinessTypeOption,
 } from '../../../../services/Invoice/business-types';
 import { normalizeWorkflowStatus } from '../../../../services/_core/locks';
 import {
@@ -37,6 +36,7 @@ import {
 } from './shared';
 import { useMessageBox } from '../../_components/useMessageBox';
 import { useRouter } from 'next/navigation';
+import InvoiceImportSetupPanel from './InvoiceImportSetupPanel';
 
 interface Option {
   value: string;
@@ -80,6 +80,7 @@ export default function InvoiceImportDialog({
   const [businessType, setBusinessType] = useState(DEFAULT_BUSINESS_TYPE);
   const [importTravelId, setImportTravelId] = useState('');
   const [importDragActive, setImportDragActive] = useState(false);
+  const [setupExpanded, setSetupExpanded] = useState(true);
   const [importMessage, setImportMessage] = useState('');
   const [importParsing, setImportParsing] = useState(false);
   const [savingImport, setSavingImport] = useState(false);
@@ -95,6 +96,7 @@ export default function InvoiceImportDialog({
       setBusinessType(DEFAULT_BUSINESS_TYPE);
       setImportTravelId('');
       setImportDragActive(false);
+      setSetupExpanded(true);
       setError('');
     }
   }, [open, defaultUserId]);
@@ -151,6 +153,7 @@ export default function InvoiceImportDialog({
       return;
     }
 
+    setSetupExpanded(false);
     setImportParsing(true);
     setImportMessage(t('parsing_files', 'Parsing files...'));
     try {
@@ -293,6 +296,15 @@ export default function InvoiceImportDialog({
       for (const row of toSave) {
         try {
           await saveInvoice(row.payload);
+          try {
+            await saveRecognizedInvoiceLines(
+              row.payload.invoiceno,
+              row.raw?.line_items ?? [],
+            );
+          } catch (lineError) {
+            await deleteInvoice(row.payload.invoiceno).catch(() => undefined);
+            throw lineError;
+          }
           await saveInvoiceSourceFile(row.sourceFile, row.payload.invoiceno);
           saved += 1;
           if (row.payload.invoiceno) {
@@ -319,6 +331,7 @@ export default function InvoiceImportDialog({
       }
       if (saved > 0 && failed.length === 0) {
         setImportRows([]);
+        setSetupExpanded(true);
         showSuccess(t('import_save_success', 'Import saved successfully'));
       }
 
@@ -619,91 +632,35 @@ export default function InvoiceImportDialog({
           pt: 1,
           flex: '1 1 auto',
           minHeight: 0,
-          overflowY: 'auto',
-          overflowX: 'hidden',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
-        <Stack spacing={2} sx={{ mt: 1 }}>
-          <Box
-            sx={{
-              border: importDragActive ? '2px dashed #1976d2' : '1px dashed rgba(25, 118, 210, 0.38)',
-              borderRadius: 1.5,
-              p: 2,
-              bgcolor: importDragActive ? 'rgba(25, 118, 210, 0.08)' : 'rgba(25, 118, 210, 0.03)',
-              transition: 'all 0.15s ease',
-            }}
+        <Stack spacing={1.25} sx={{ mt: 1, flex: 1, minHeight: 0 }}>
+          <InvoiceImportSetupPanel
+            expanded={setupExpanded}
+            onExpandedChange={setSetupExpanded}
+            fileCount={importRows.length}
+            userId={importUserId}
+            onUserIdChange={setImportUserId}
+            businessType={businessType}
+            onBusinessTypeChange={setBusinessType}
+            travelId={importTravelId}
+            onTravelIdChange={setImportTravelId}
+            userOptions={userOptions}
+            travelOptions={travelOptions}
+            dragActive={importDragActive}
+            parsing={importParsing}
+            saving={savingImport}
+            onFilesChange={handleImportFiles}
             onDrop={handleImportDrop}
             onDragOver={handleImportDragOver}
             onDragLeave={handleImportDragLeave}
-          >
-            <Stack spacing={1.5}>
-              <Button component="label" variant="outlined" startIcon={<UploadFileRoundedIcon />} disabled={importParsing || savingImport}>
-                {t('choose_invoice_files', 'Choose Invoice Files (Multiple)')}
-                <input
-                  hidden
-                  type="file"
-                  accept=".pdf,application/pdf,image/*"
-                  multiple
-                  onChange={handleImportFiles}
-                />
-              </Button>
-              <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
-                {t('import_files_hint', 'Drag PDF or image files here. The system uses InvoiceProcessing to extract information.')}
-              </Typography>
-              <TextField
-                label={t('user_id', 'User ID')}
-                value={importUserId}
-                onChange={(e) => setImportUserId(e.target.value)}
-                fullWidth
-                select
-                disabled={userOptions.length === 0 || importParsing || savingImport}
-                helperText={userOptions.length === 0 ? t('no_users_available', 'No users available, please create a user first') : t('apply_to_all_imported_invoices', 'Applied to all imported invoices')}
-              >
-                {userOptions.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                label={t('business_type', 'Business Type')}
-                value={businessType}
-                onChange={(e) => setBusinessType(e.target.value)}
-                fullWidth
-                select
-                required
-                disabled={importParsing || savingImport}
-                helperText={t('apply_to_all_imported_invoices', 'Applied to all imported invoices')}
-              >
-                {BUSINESS_TYPE_OPTIONS.map((option) => (
-                  <MenuItem key={option.code} value={option.code}>
-                    {formatBusinessTypeOption(option, t)}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                label={t('travel_id', 'Travel ID')}
-                value={importTravelId}
-                onChange={(e) => setImportTravelId(e.target.value)}
-                fullWidth
-                select
-                disabled={travelOptions.length === 0 || importParsing || savingImport}
-                helperText={travelOptions.length === 0 ? t('no_travel_available_import', 'No travel entries are available. You may import without one.') : t('optional_apply_to_all_imported_invoices', 'Optional. Applied to all imported invoices.')}
-              >
-                <MenuItem value="">{t('none', '(None)')}</MenuItem>
-                {travelOptions.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Stack>
-            <Typography sx={{ mt: 1.2, fontSize: 13, color: 'text.secondary' }}>
-              {t('import_skippable_rows_hint', 'Upload files above. The system extracts information with InvoiceProcessing; red rows are skipped during saving.')}
-            </Typography>
-          </Box>
+            t={t}
+          />
 
-          <Alert severity="info">
+          <Alert severity="info" sx={{ flexShrink: 0, py: 0.25 }}>
             {t('import_stats', 'Total {0}; ready to save {1}; skipped {2}')
               .replace('{0}', String(importStats.total))
               .replace('{1}', String(importStats.savable))
@@ -713,9 +670,8 @@ export default function InvoiceImportDialog({
 
           <Box
             sx={{
-              height: 'min(48vh, 520px)',
-              minHeight: 320,
-              flex: '0 0 auto',
+              flex: '1 1 auto',
+              minHeight: 0,
               minWidth: 0,
               overflow: 'hidden',
               '& .MuiToolbar-root': { display: 'none' },

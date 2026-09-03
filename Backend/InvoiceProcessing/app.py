@@ -18,6 +18,17 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title=settings.app_name, version="0.2.0")
 
 
+class InvoiceLineItemResponse(BaseModel):
+    line_no: int
+    description: str
+    spec_model: str
+    unit_price: float | None
+    quantity: float | None
+    amount_excl_tax: float | None
+    tax_rate: str
+    amount_incl_tax: float | None
+
+
 class ClassifyResponse(BaseModel):
     file: str
     status: int
@@ -35,6 +46,7 @@ class ClassifyResponse(BaseModel):
     tax_amount: float | None
     amount_incl_tax: float | None
     line_items_count: int
+    line_items: list[InvoiceLineItemResponse]
     engine: str
     fallback_used: bool
     reason: str
@@ -130,6 +142,19 @@ async def classify_invoice_endpoint(
         tax_amount=_round2(result.tax_amount),
         amount_incl_tax=_round2(result.amount_incl_tax),
         line_items_count=len(result.line_items),
+        line_items=[
+            InvoiceLineItemResponse(
+                line_no=item.line_no,
+                description=item.description,
+                spec_model=item.spec_model,
+                unit_price=item.unit_price,
+                quantity=item.quantity,
+                amount_excl_tax=item.amount_excl_tax,
+                tax_rate=item.tax_rate,
+                amount_incl_tax=item.amount_incl_tax,
+            )
+            for item in result.line_items
+        ],
         engine=engine,
         fallback_used=result.fallback_used,
         reason=result.reason,

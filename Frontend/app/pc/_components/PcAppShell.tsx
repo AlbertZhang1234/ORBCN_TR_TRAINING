@@ -9,6 +9,7 @@ import { usePcColorMode } from './color-mode';
 import { buildPcMenuData, HeaderLogo } from './nav';
 import { getSessionUser, type SessionUser } from './session';
 import { performClientLogout } from '../../../services/Auth/logoutClient';
+import { SupplierDraftProvider } from './SupplierDraftProvider';
 
 const pageTitles: Record<string, [string, string]> = {
   '/pc/home': ['home', 'Home'],
@@ -19,6 +20,8 @@ const pageTitles: Record<string, [string, string]> = {
   '/pc/booking-rules': ['booking_rules', 'Booking Rules'],
   '/pc/travel-entries': ['travel_entries', 'Travel Management'],
   '/pc/invoices': ['invoices', 'Invoice Management'],
+  '/pc/supplier-invoice-recognition': ['supplier_invoice_recognition', 'Supplier Invoice Recognition'],
+  '/pc/supplier-invoices': ['supplier_invoice_management', 'Supplier Invoice Management'],
   '/pc/reimbursements': ['reimbursements', 'Reimbursement Management'],
   '/pc/approve': ['approve', 'Approval'],
   '/pc/tr-booking': ['tr_booking_title', 'TR Booking & Archive'],
@@ -117,6 +120,7 @@ export function PcAppShell({ children }: PropsWithChildren) {
 
   return (
     <PcHeaderContext.Provider value={{ registerSearchHandler }}>
+      <SupplierDraftProvider key={sessionUser.session_id}>
       <Box
         sx={(theme) => ({
         minHeight: '100vh',
@@ -151,6 +155,7 @@ export function PcAppShell({ children }: PropsWithChildren) {
           </Box>
         </Box>
       </Box>
+      </SupplierDraftProvider>
     </PcHeaderContext.Provider>
   );
 }

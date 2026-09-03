@@ -16,6 +16,7 @@ interface InvoicePreviewDialogProps {
   open: boolean;
   onClose: () => void;
   invoiceNo: string;
+  sourceUrl?: string;
   t: (key: string, fallback: string) => string;
 }
 
@@ -23,6 +24,7 @@ export default function InvoicePreviewDialog({
   open,
   onClose,
   invoiceNo,
+  sourceUrl,
   t,
 }: InvoicePreviewDialogProps) {
   const [loading, setLoading] = useState(true);
@@ -42,11 +44,12 @@ export default function InvoicePreviewDialog({
 
     setLoading(true);
     setError(false);
+    setPreviewUrl('');
 
     void (async () => {
       try {
         const response = await fetch(
-          `/api/invoice/source?invoiceNo=${encodeURIComponent(invoiceNo)}`,
+          sourceUrl ?? `/api/invoice/source?invoiceNo=${encodeURIComponent(invoiceNo)}`,
           {
             method: 'GET',
             headers: {
@@ -80,7 +83,7 @@ export default function InvoicePreviewDialog({
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [invoiceNo, open]);
+  }, [invoiceNo, sourceUrl, open]);
 
   // Removed early return to allow Dialog to handle open/close animation properly
   // if (!invoiceNo) return null;

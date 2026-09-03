@@ -136,6 +136,26 @@ export function buildPcMenuData(t: Translate) {
     children: reimbursementChildren,
   });
 
+  menus.push({
+    id: 'supplier_receiving',
+    title: t('supplier_receiving', 'Supplier Receiving'),
+    icon: <BusinessRoundedIcon fontSize="small" />,
+    children: [
+      {
+        id: 'supplier_invoice_recognition',
+        title: t('supplier_invoice_recognition', 'Supplier Invoice Recognition'),
+        href: '/pc/supplier-invoice-recognition',
+        icon: <ReceiptRoundedIcon fontSize="small" />,
+      },
+      {
+        id: 'supplier_invoice_management',
+        title: t('supplier_invoice_management', 'Supplier Invoice Management'),
+        href: '/pc/supplier-invoices',
+        icon: <DescriptionRoundedIcon fontSize="small" />,
+      },
+    ],
+  });
+
   if (isFinance || isAdmin) {
     menus.push({
       id: 'finance',

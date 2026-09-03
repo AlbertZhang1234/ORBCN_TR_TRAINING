@@ -70,6 +70,19 @@ CREATE TABLE IF NOT EXISTS otto_invoices (
     PRIMARY KEY ("invoiceno")
 );
 
+CREATE TABLE IF NOT EXISTS otto_invoice_lines (
+    "invoiceno" TEXT NOT NULL,
+    "seqno" INTEGER NOT NULL CHECK ("seqno" > 0),
+    "description" TEXT NOT NULL DEFAULT '',
+    "spec_model" TEXT,
+    "unit_price" NUMERIC,
+    "quantity" NUMERIC,
+    "amount_excl_tax" NUMERIC,
+    "tax_rate" TEXT,
+    "amount_incl_tax" NUMERIC,
+    PRIMARY KEY ("invoiceno", "seqno")
+);
+
 CREATE TABLE IF NOT EXISTS otto_booking_rule (
     "code" TEXT PRIMARY KEY,
     "category" TEXT NOT NULL,
@@ -147,6 +160,7 @@ ALTER TABLE otto_project ADD CONSTRAINT fk_project_manager FOREIGN KEY (projectm
 ALTER TABLE otto_travelentry ADD CONSTRAINT fk_travel_user FOREIGN KEY (userid) REFERENCES otto_user(userid);
 ALTER TABLE otto_travelentry ADD CONSTRAINT fk_travel_project FOREIGN KEY (projectid) REFERENCES otto_project(projectid);
 ALTER TABLE otto_invoices ADD CONSTRAINT fk_invoice_travel FOREIGN KEY (travelid) REFERENCES otto_travelentry(travelid);
+ALTER TABLE otto_invoice_lines ADD CONSTRAINT fk_invoice_line_invoice FOREIGN KEY (invoiceno) REFERENCES otto_invoices(invoiceno) ON DELETE CASCADE;
 ALTER TABLE otto_tr_h ADD CONSTRAINT fk_trh_project FOREIGN KEY (projectid) REFERENCES otto_project(projectid);
 ALTER TABLE otto_tr_t ADD CONSTRAINT fk_trt_header FOREIGN KEY (id) REFERENCES otto_tr_h(id);
 ALTER TABLE otto_tr_t ADD CONSTRAINT fk_trt_invoice FOREIGN KEY (invoiceno) REFERENCES otto_invoices(invoiceno);
@@ -206,3 +220,30 @@ LEFT JOIN otto_tr_t t ON t.id = h.id
 LEFT JOIN otto_invoices i ON i.invoiceno = t.invoiceno
 LEFT JOIN otto_travelentry te ON te.travelid = i.travelid
 LEFT JOIN otto_user invoice_u ON invoice_u.userid = i.userid;
+
+-- Durable upload queue. File bytes live in persistent server storage.
+CREATE TABLE IF NOT EXISTS otto_supplier_invoice_drafts (
+  id UUID PRIMARY KEY,
+  userid TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  storage_key TEXT NOT NULL UNIQUE,
+  content_type TEXT NOT NULL,
+  file_size BIGINT NOT NULL CHECK (file_size > 0),
+  status TEXT NOT NULL DEFAULT 'queued'
+    CHECK (status IN ('queued','recognizing','ready','editing','confirmed','saved','error')),
+  header JSONB NOT NULL DEFAULT '{}'::jsonb,
+  lines JSONB NOT NULL DEFAULT '[]'::jsonb,
+  recognized_result JSONB,
+  error TEXT,
+  version INTEGER NOT NULL DEFAULT 1,
+  lease_token UUID,
+  lease_until TIMESTAMPTZ,
+  saved_invoice_no TEXT UNIQUE REFERENCES otto_invoices(invoiceno) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (header->>'businesstype' IN ('01','02'))
+);
+CREATE INDEX IF NOT EXISTS idx_supplier_drafts_user ON otto_supplier_invoice_drafts(userid, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_supplier_drafts_queue ON otto_supplier_invoice_drafts(status, lease_until, created_at);
+-- Access only through authenticated server services, never anonymous Supabase REST.
+ALTER TABLE otto_supplier_invoice_drafts ENABLE ROW LEVEL SECURITY;

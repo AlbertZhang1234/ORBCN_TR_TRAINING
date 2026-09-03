@@ -1,5 +1,6 @@
 import { ServiceError } from '../_core/error';
 import { getClientSessionId } from '../_core/session';
+import type { RecognizedInvoiceLine } from './lines';
 
 export interface InvoiceParseResult extends Record<string, unknown> {
   file?: string;
@@ -18,6 +19,7 @@ export interface InvoiceParseResult extends Record<string, unknown> {
   tax_amount?: number | null;
   amount_incl_tax?: number | null;
   line_items_count?: number;
+  line_items?: RecognizedInvoiceLine[];
   engine?: string;
   fallback_used?: boolean;
   reason?: string;

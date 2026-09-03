@@ -60,3 +60,20 @@ export async function queryOne<T extends pg.QueryResultRow = any>(
   const rows = await query<T>(text, params);
   return rows[0] || null;
 }
+
+export async function withTransaction<T>(
+  work: (client: pg.PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw normalizeDbError(error);
+  } finally {
+    client.release();
+  }
+}

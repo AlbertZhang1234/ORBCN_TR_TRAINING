@@ -52,6 +52,17 @@ Table:
 - `comment` (string): 备注
 - `description` (string): 描述
 
+### otto_invoice_lines (发票行项目表)
+- `invoiceno` (PK, FK, string): 发票编号，关联 `otto_invoices.invoiceno`
+- `seqno` (PK, integer): 发票内部行号，从 1 开始
+- `description` (string): 货物或应税劳务、服务名称
+- `spec_model` (string): 规格型号
+- `unit_price` (numeric): 单价
+- `quantity` (numeric): 数量
+- `amount_excl_tax` (numeric): 行项目不含税金额
+- `tax_rate` (string): 税率原文
+- `amount_incl_tax` (numeric): 行项目含税金额
+
 ### otto_booking_rule (记账规则主数据)
 - `code` (PK, string): 记账规则代码
 - `category` (string): 规则类别
@@ -243,4 +254,12 @@ Table:
 - SOBE (Others): 其他、无法明确分类
 
 # 所有报销单与发票的数据
+
+## 供应商发票上传任务与草稿
+
+`otto_supplier_invoice_drafts` 持久化上传任务、后台识别状态、原始识别结果、编辑草稿与正式发票关联。
+文件以 UUID 键存服务器持久化目录，数据库保存文件元信息，不保存二进制内容。
+`header` / `lines` 为 JSONB 草稿；正式确认保存仍写 `otto_invoices` / `otto_invoice_lines`。
+表启用 RLS，仅经服务端鉴权访问；工作台按上传人隔离。部署细节见 `Frontend/docs/supplier-invoice-drafts.md`。
+
 otto_v_tr_all: 这是数据库中综合了所有报销单与发票相关数据的视图，可以通过它快速的查询数据

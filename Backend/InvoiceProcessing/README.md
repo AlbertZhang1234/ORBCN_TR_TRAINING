@@ -131,6 +131,7 @@ print(resp.json())
 - `tax_amount`: 税额（两位小数）
 - `amount_incl_tax`: 含税金额（两位小数）
 - `line_items_count`: 发票行数
+- `line_items`: 完整发票行项目数组，包含行号、名称、规格型号、单价、数量、不含税金额、税率和含税金额
 - `engine`: 文本提取引擎（`mineru` / `pdfminer` / `tesseract`）
 - `fallback_used`: 是否使用分类兜底
 - `reason`: 分类原因

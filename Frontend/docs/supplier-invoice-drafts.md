@@ -38,6 +38,17 @@ Next.js Node 服务启动时由 `instrumentation.ts` 注册后台轮询器。采
 
 ## 验证
 
+管理页选中一张供应商发票后可点击修改，读取已保存抬头及全部行项目，复用识别页编辑器。
+支持修改发票号码、业务字段、原币金额及币种，并新增、复制、删除行；提交和记账状态由原工作流控制。
+保存通过 `/api/supplier-invoices/detail` 在同一事务中更新抬头、行项目及已保存草稿，空字段可清空。
+读取版本与保存时内容不一致则返回 409，避免覆盖其他页面的修改。已提交或已记账的发票不可编辑；
+管理员及财务可修改其他用户发票，普通用户只能修改自己的发票且不可转移所属用户。
+修改号码时同步行项目、报销关联和原文件关联，无需数据库迁移；旧文件按需复制到 UUID 存储，原文件保留。
+新旧关联与数据保存一起提交，失败时回滚并清理临时副本。
+
+管理页编辑的数据库集成测试使用隔离 schema，验证后整体回滚：设置 `SUPPLIER_EDIT_INTEGRATION=1`，运行
+`node --env-file=.env.local --import tsx --test tests/supplier-invoice-edit.integration.test.ts`。
+
 ```
 npx tsx --test tests/supplier-draft-store.test.ts tests/supplier-invoice-recognition.test.ts tests/invoice-lines.test.ts
 ```

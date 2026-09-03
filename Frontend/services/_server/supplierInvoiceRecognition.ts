@@ -41,7 +41,7 @@ function optionalNumber(value: unknown, field: string): number | null {
   return parsed;
 }
 
-function normalizeHeader(input: SupplierInvoiceHeaderInput) {
+export function normalizeSupplierInvoiceHeader(input: SupplierInvoiceHeaderInput) {
   const invoiceno = clean(input.invoiceno);
   const businesstype = clean(input.businesstype) || '01';
   if (!invoiceno) throw new ServiceError('invoiceno is required', { status: 400 });
@@ -68,7 +68,7 @@ function normalizeHeader(input: SupplierInvoiceHeaderInput) {
   };
 }
 
-async function insertLines(
+export async function insertSupplierInvoiceLines(
   client: pg.PoolClient,
   invoiceNo: string,
   lines: ReturnType<typeof normalizeRecognizedInvoiceLines>,
@@ -94,7 +94,7 @@ export async function createSupplierInvoiceWithLines(
   headerInput: SupplierInvoiceHeaderInput,
   lineItems: RecognizedInvoiceLineInput[],
 ): Promise<StoredHeader> {
-  const header = normalizeHeader(headerInput);
+  const header = normalizeSupplierInvoiceHeader(headerInput);
   if (!Array.isArray(lineItems) || lineItems.length === 0) {
     throw new ServiceError('At least one invoice line is required', { status: 400 });
   }
@@ -122,7 +122,7 @@ export async function createSupplierInvoiceWithLines(
        header.description, header.comment, header.bookingcode, header.businesstype,
        header.currency, header.totalnetamount, header.taxamount, header.grossamount],
     );
-    await insertLines(client, header.invoiceno, lines);
+    await insertSupplierInvoiceLines(client, header.invoiceno, lines);
     return result.rows[0];
   });
 }

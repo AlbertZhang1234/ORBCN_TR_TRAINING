@@ -230,7 +230,7 @@ CREATE TABLE IF NOT EXISTS otto_supplier_invoice_drafts (
   content_type TEXT NOT NULL,
   file_size BIGINT NOT NULL CHECK (file_size > 0),
   status TEXT NOT NULL DEFAULT 'queued'
-    CHECK (status IN ('queued','recognizing','ready','editing','confirmed','saved','error')),
+    CHECK (status IN ('queued','recognizing','ready','editing','saved','error')),
   header JSONB NOT NULL DEFAULT '{}'::jsonb,
   lines JSONB NOT NULL DEFAULT '[]'::jsonb,
   recognized_result JSONB,

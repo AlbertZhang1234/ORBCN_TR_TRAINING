@@ -56,7 +56,7 @@ test('durable upload, background completion, restore, edits, atomic save, permis
       await assert.rejects(service.patch(auth, restored.id, before), /已在其他页面更新/);
       const draftOriginal = await source.read(auth, restored.id, null);
       assert.equal(draftOriginal.bytes.toString(), '%PDF-1.4\ntest fixture');
-      restored = await service.action(auth, restored.id, 'confirm', restored.version);
+      await assert.rejects(service.action(auth, restored.id, 'confirm', restored.version), /Invalid action/);
       const saved = await service.action(auth, restored.id, 'save', restored.version);
       assert.equal(saved.status, 'saved');
       assert.equal((await service.action(auth, restored.id, 'save', restored.version)).status, 'saved');
@@ -73,6 +73,16 @@ test('durable upload, background completion, restore, edits, atomic save, permis
       await assert.rejects(service.action(auth, duplicate.id, 'save', duplicate.version), /already exists/);
       assert.equal((await db.query('SELECT * FROM otto_invoices')).rows.length, 1);
       assert.equal((await service.list(auth)).find((row) => row.id === second.id)!.status, 'ready');
+      // Simulate an existing deployment, then verify lossless migration of its review state.
+      await db.query('ALTER TABLE otto_supplier_invoice_drafts DROP CONSTRAINT otto_supplier_invoice_drafts_status_check');
+      await db.query("UPDATE otto_supplier_invoice_drafts SET status='confirmed' WHERE id=$1", [second.id]);
+      await db.query(await readFile('../Backend/Database/migration/remove_supplier_invoice_draft_confirmation.sql', 'utf8'));
+      const migrated = (await service.list(auth)).find((row) => row.id === second.id)!;
+      assert.equal(migrated.status, 'ready');
+      assert.equal(migrated.version, duplicate.version + 1);
+      assert.deepEqual(migrated.header, duplicate.header);
+      assert.deepEqual(migrated.lines, duplicate.lines);
+      assert.equal((await source.read(auth, second.id, null)).bytes.toString(), draftOriginal.bytes.toString());
       const third = await service.upload(auth, pdf, '01');
       await processNextSupplierDraft(repo, files, async () => ({ ...parsed, invoice_number: 'ROLLBACK-ME', line_items: [{ description: 'REJECT-LINE' }] }));
       await db.query("ALTER TABLE otto_invoice_lines ADD CONSTRAINT test_fail_line CHECK(description <> 'REJECT-LINE')");

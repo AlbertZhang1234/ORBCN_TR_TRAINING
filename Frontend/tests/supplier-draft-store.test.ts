@@ -12,7 +12,7 @@ function deferred<T>() {
 const api = () => ({
   list: async () => [row()], upload: async () => row(),
   patch: async (value: SupplierInvoiceDraft) => ({ ...value, version: value.version + 1 }),
-  action: async (value: SupplierInvoiceDraft, action: string) => ({ ...value, status: action === 'save' ? 'saved' : 'confirmed', version: value.version + 1 } as SupplierInvoiceDraft),
+  action: async (value: SupplierInvoiceDraft, action: string) => ({ ...value, status: action === 'save' ? 'saved' : 'queued', version: value.version + 1 } as SupplierInvoiceDraft),
 });
 test('an upload finishes after its page unsubscribes and is available on return', async () => {
   const uploaded = deferred<SupplierInvoiceDraft>();
@@ -79,4 +79,47 @@ test('a stale list response cannot roll back a newer saved state', async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(store.getSnapshot().drafts[0].status, 'saved');
   assert.equal(store.getSnapshot().drafts[0].version, 2);
+});
+
+test('save all saves ready/edited/error drafts without confirmation, skips processing and continues after failure', async () => {
+  const statuses = ['ready', 'editing', 'error', 'saved', 'queued', 'recognizing', 'ready'] as const;
+  const records = statuses.map((status, index) => ({ ...row(), id: `draft-${index}`, filename: `${index}.pdf`, status }));
+  const calls: string[] = [];
+  const store = new SupplierDraftStore({ ...api(), upload: async () => records.shift()!, action: async (value, action) => {
+    assert.equal(action, 'save');
+    calls.push(value.id);
+    if (value.id === 'draft-2') throw new Error('发票号码不能为空');
+    return { ...value, status: 'saved', version: value.version + 1 };
+  } });
+  await store.upload(statuses.map(() => ({} as File)), '01');
+  const result = await store.saveAll();
+  assert.equal(result.total, 6);
+  assert.equal(result.saved, 3);
+  assert.equal(result.skipped.length, 2);
+  assert.deepEqual(result.failed, [{ filename: '2.pdf', reason: '发票号码不能为空' }]);
+  assert.equal(calls.length, 4);
+  assert.ok(calls.includes('draft-0') && calls.includes('draft-1') && calls.includes('draft-6'));
+  assert.equal(store.getSnapshot().drafts.find((item) => item.id === 'draft-2')!.status, 'error');
+  assert.equal(store.getSnapshot().savingAll, false);
+});
+
+test('save all waits for latest autosave and prevents duplicate batches and mid-batch edits', async () => {
+  const patched = deferred<SupplierInvoiceDraft>();
+  const calls: SupplierInvoiceDraft[] = [];
+  const store = new SupplierDraftStore({ ...api(), patch: () => patched.promise, action: async (value) => {
+    calls.push(value); return { ...value, status: 'saved', version: value.version + 1 };
+  } });
+  await store.upload([{} as File], '01');
+  const header = { ...row().header, invoiceno: 'LATEST-EDIT' };
+  store.edit('draft', { header });
+  const batch = store.saveAll();
+  await assert.rejects(store.saveAll(), /正在批量保存/);
+  store.edit('draft', { header: { ...header, invoiceno: 'DO-NOT-CHANGE' } });
+  patched.resolve({ ...row(), header, status: 'editing', version: 2 });
+  const result = await batch;
+  assert.equal(result.saved, 1);
+  assert.equal(calls[0].header.invoiceno, 'LATEST-EDIT');
+  assert.equal(calls[0].version, 2);
+  assert.deepEqual(store.getSnapshot().dirty, []);
+  assert.equal(store.getSnapshot().savingAll, false);
 });

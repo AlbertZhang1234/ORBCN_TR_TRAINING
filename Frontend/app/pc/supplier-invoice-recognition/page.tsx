@@ -10,44 +10,38 @@ import InvoicePreviewDialog from '../invoices/_components/InvoicePreviewDialog';
 import { DraftSidebar } from './_components/DraftSidebar';
 import { HeaderEditor } from './_components/HeaderEditor';
 import { LineEditor } from './_components/LineEditor';
-import { nextEditableIndex, reconciliationWarnings, type SupplierBusinessType } from './_components/model';
+import { reconciliationWarnings, type SupplierBusinessType } from './_components/model';
 
 export default function SupplierInvoiceRecognitionPage() {
   const input = useRef<HTMLInputElement>(null);
   const { t } = usePcI18n();
-  const { store, drafts, busy, dirty, uploading, loading, error } = useSupplierDrafts();
+  const { store, drafts, busy, dirty, uploading, loading, error, savingAll } = useSupplierDrafts();
   const [selectedId, setSelectedId] = useState<string>();
   const [uploadType, setUploadType] = useState<SupplierBusinessType>('01');
   const [preview, setPreview] = useState(false);
-  const [notice, setNotice] = useState('');
-  const [savingAll, setSavingAll] = useState(false);
+  const [notice, setNotice] = useState<{ message: string; severity: 'success' | 'warning' } | null>(null);
   const selected = drafts.find((row) => row.id === selectedId) ?? drafts[0];
   const recognizing = selected && ['queued','recognizing'].includes(selected.status);
   const disabled = savingAll || !selected || recognizing || selected.status === 'saved' || busy.includes(selected.id);
 
-  const act = async (action: 'confirm'|'save'|'retry') => {
+  const act = async (action: 'save'|'retry') => {
     if (!selected) return;
     if (action === 'retry' && !window.confirm('重新识别会替换当前草稿中的抬头和行项目，是否继续？')) return;
     try {
       await store.action(selected.id, action);
-      setNotice(action === 'save' ? '发票及行项目已正式保存，原文件可在管理页查看。'
-        : action === 'retry' ? '已重新加入识别队列。' : '当前发票已确认并保存草稿。');
-      if (action === 'confirm') {
-        const rows = store.getSnapshot().drafts;
-        setSelectedId(rows[nextEditableIndex(rows, rows.findIndex((row) => row.id === selected.id))]?.id);
-      }
+      setNotice({ severity: 'success', message: action === 'save'
+        ? '发票及行项目已正式保存，原文件可在管理页查看。' : '已重新加入识别队列。' });
     } catch { /* The shared store displays the server error, including after navigation. */ }
   };
   const saveAll = async () => {
-    setSavingAll(true);
-    let saved = 0;
-    const targets = drafts.filter((row) => row.status === 'confirmed');
-    for (const row of targets) {
-      if (store.getSnapshot().drafts.find((item) => item.id === row.id)?.status !== 'confirmed') continue;
-      try { await store.action(row.id, 'save'); saved += 1; } catch { /* Continue independent invoices. */ }
+    try {
+      const result = await store.saveAll();
+      const details = [...result.skipped, ...result.failed].map((item) => `${item.filename}：${item.reason}`).join('；');
+      setNotice({ severity: details ? 'warning' : 'success',
+        message: `已保存 ${result.saved} / ${result.total} 张发票，跳过 ${result.skipped.length} 张，失败 ${result.failed.length} 张。${details}` });
+    } catch (error) {
+      setNotice({ severity: 'warning', message: error instanceof Error ? error.message : '批量保存失败' });
     }
-    setSavingAll(false);
-    setNotice(`已保存 ${saved} / ${targets.length} 张已确认发票。`);
   };
   return (
     <Stack spacing={1.5} sx={{ height: '100%', minHeight: 0 }}>
@@ -63,7 +57,7 @@ export default function SupplierInvoiceRecognitionPage() {
             void store.upload(files, uploadType);
           }} />
           <Button variant="contained" startIcon={<CloudUploadRoundedIcon />} onClick={() => input.current?.click()}>批量上传识别</Button>
-          <Button startIcon={<SaveRoundedIcon />} disabled={savingAll || !drafts.some((row) => row.status === 'confirmed')} onClick={() => void saveAll()}>保存全部已确认</Button>
+          <Button startIcon={<SaveRoundedIcon />} disabled={savingAll || loading || busy.length > 0 || !drafts.some((row) => row.status !== 'saved')} onClick={() => void saveAll()}>{savingAll ? '保存中…' : '保存全部'}</Button>
         </Stack>
       </Paper>
       <Alert severity={uploading || dirty.length ? 'warning' : 'info'}>
@@ -71,7 +65,7 @@ export default function SupplierInvoiceRecognitionPage() {
           : dirty.length ? '草稿正在同步到服务器，请勿刷新或关闭浏览器；可以切换功能页面。'
           : '上传成功的文件、识别状态和草稿已保存到服务器，可以安全切换页面或刷新。'}
       </Alert>
-      {notice && <Alert severity="success" onClose={() => setNotice('')}>{notice}</Alert>}
+      {notice && <Alert severity={notice.severity} onClose={() => setNotice(null)}>{notice.message}</Alert>}
       {error && selected && <Alert severity="error" action={<Button color="inherit" onClick={() => {
         if (window.confirm('将放弃这张发票尚未同步的本地改动，加载服务器草稿，是否继续？')) void store.reload(selected.id);
       }}>重新加载草稿</Button>}>{error}</Alert>}
@@ -96,7 +90,6 @@ export default function SupplierInvoiceRecognitionPage() {
                 <Typography sx={{ mr: 'auto', alignSelf: 'center' }} color="text.secondary">{dirty.includes(selected.id) ? '草稿同步中…' : selected.status === 'saved' ? '已正式保存' : '草稿已自动保存'}</Typography>
                 <Button disabled={disabled} onClick={() => void act('retry')}>重新识别</Button>
                 <Button disabled={disabled} onClick={() => void act('save')}>保存当前</Button>
-                <Button variant="contained" disabled={disabled} onClick={() => void act('confirm')}>确认并下一张</Button>
               </Stack>
             </>}
           </Stack>}

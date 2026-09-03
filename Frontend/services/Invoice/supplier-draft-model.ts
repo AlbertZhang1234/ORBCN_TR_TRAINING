@@ -1,6 +1,6 @@
 import type { InvoiceParseResult } from './parse';
 
-export type DraftStatus = 'queued' | 'recognizing' | 'ready' | 'editing' | 'confirmed' | 'saved' | 'error';
+export type DraftStatus = 'queued' | 'recognizing' | 'ready' | 'editing' | 'saved' | 'error';
 export type SupplierBusinessType = '01' | '02';
 export interface EditableLine {
   key: string;
@@ -82,11 +82,4 @@ export function reconciliationWarnings(draft: Pick<SupplierInvoiceDraft, 'header
 }
 export function lineForSave({ key, ...line }: EditableLine, index: number) {
   return { ...line, line_no: index + 1 };
-}
-export function nextEditableIndex(drafts: SupplierInvoiceDraft[], current: number): number {
-  for (let offset = 1; offset <= drafts.length; offset += 1) {
-    const index = (current + offset) % drafts.length;
-    if (!['confirmed', 'saved', 'queued', 'recognizing'].includes(drafts[index].status)) return index;
-  }
-  return current;
 }

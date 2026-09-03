@@ -23,7 +23,7 @@ export const supplierDraftApi = {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ version: row.version, header: row.header, lines: row.lines }),
   }),
-  action: (row: SupplierInvoiceDraft, action: 'confirm' | 'save' | 'retry') => request<SupplierInvoiceDraft>(`/api/supplier-invoices/drafts/${row.id}`, {
+  action: (row: SupplierInvoiceDraft, action: 'save' | 'retry') => request<SupplierInvoiceDraft>(`/api/supplier-invoices/drafts/${row.id}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, version: row.version }),
   }),
 };

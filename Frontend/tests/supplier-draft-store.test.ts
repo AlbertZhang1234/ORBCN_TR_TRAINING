@@ -52,6 +52,7 @@ test('formal save waits for draft persistence', async () => {
   store.edit('draft', { header: { ...row().header, invoiceno: 'edited' } });
   await store.action('draft', 'save');
   assert.deepEqual(order, ['patch','save']);
+  assert.deepEqual(store.getSnapshot().drafts, []);
 });
 test('failed autosave keeps pending content for retry', async () => {
   let fail = true;
@@ -69,7 +70,7 @@ test('failed autosave keeps pending content for retry', async () => {
   assert.deepEqual(store.getSnapshot().dirty, []);
 });
 
-test('a stale list response cannot roll back a newer saved state', async () => {
+test('a stale list response cannot restore a saved task to the pending list', async () => {
   const listed = deferred<SupplierInvoiceDraft[]>();
   const store = new SupplierDraftStore({ ...api(), list: () => listed.promise });
   await store.upload([{} as File], '01');
@@ -77,8 +78,7 @@ test('a stale list response cannot roll back a newer saved state', async () => {
   await store.action('draft', 'save');
   listed.resolve([row()]);
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(store.getSnapshot().drafts[0].status, 'saved');
-  assert.equal(store.getSnapshot().drafts[0].version, 2);
+  assert.deepEqual(store.getSnapshot().drafts, []);
 });
 
 test('save all saves ready/edited/error drafts without confirmation, skips processing and continues after failure', async () => {
@@ -100,7 +100,67 @@ test('save all saves ready/edited/error drafts without confirmation, skips proce
   assert.equal(calls.length, 4);
   assert.ok(calls.includes('draft-0') && calls.includes('draft-1') && calls.includes('draft-6'));
   assert.equal(store.getSnapshot().drafts.find((item) => item.id === 'draft-2')!.status, 'error');
+  assert.equal(store.getSnapshot().drafts.length, 3);
+  assert.ok(store.getSnapshot().drafts.every((item) => item.status !== 'saved'));
   assert.equal(store.getSnapshot().savingAll, false);
+});
+
+test('initial loading excludes saved tasks and a fresh store does not restore them', async () => {
+  const records: SupplierInvoiceDraft[] = [row(), { ...row(), id: 'saved', status: 'saved' }];
+  for (let visit = 0; visit < 2; visit++) {
+    const store = new SupplierDraftStore({ ...api(), list: async () => records });
+    store.activate();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(store.getSnapshot().drafts.map((item) => item.id), ['draft']);
+  }
+});
+
+test('polling removes tasks saved in another tab', async () => {
+  const store = new SupplierDraftStore({ ...api(), list: async () => [] });
+  await store.upload([{} as File], '01');
+  store.activate();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(store.getSnapshot().drafts, []);
+});
+
+test('a list requested before an upload completed cannot discard that new task', async () => {
+  const listed = deferred<SupplierInvoiceDraft[]>();
+  const store = new SupplierDraftStore({ ...api(), list: () => listed.promise });
+  store.activate();
+  await store.upload([{} as File], '01');
+  listed.resolve([]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(store.getSnapshot().drafts[0].id, 'draft');
+});
+
+test('an omitted task with unsynced edits is retained instead of silently losing edits', async () => {
+  const store = new SupplierDraftStore({ ...api(), list: async () => [], patch: async () => { throw new Error('offline'); } });
+  await store.upload([{} as File], '01');
+  store.edit('draft', { header: { ...row().header, supplier: 'Unsynced' } });
+  await store.flush('draft').catch(() => undefined);
+  store.activate();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(store.getSnapshot().drafts[0].header.supplier, 'Unsynced');
+  assert.deepEqual(store.getSnapshot().dirty, ['draft']);
+});
+
+test('a batch continues if another tab saves a later task while the first is saving', async () => {
+  const first = deferred<SupplierInvoiceDraft>();
+  let records = [row(), { ...row(), id: 'second', filename: 'second.pdf' }];
+  const store = new SupplierDraftStore({ ...api(), list: async () => records, action: () => first.promise });
+  store.activate();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const saving = store.saveAll();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  records = [];
+  await store.refresh();
+  assert.deepEqual(store.getSnapshot().drafts.map((item) => item.id), ['draft']);
+  first.resolve({ ...row(), status: 'saved', version: 2 });
+  const result = await saving;
+  assert.equal(result.saved, 1);
+  assert.equal(result.skipped[0].filename, 'second.pdf');
+  assert.equal(result.failed.length, 0);
+  assert.deepEqual(store.getSnapshot().drafts, []);
 });
 
 test('save all waits for latest autosave and prevents duplicate batches and mid-batch edits', async () => {

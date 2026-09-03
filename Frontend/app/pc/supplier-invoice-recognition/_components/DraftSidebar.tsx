@@ -17,8 +17,8 @@ export function DraftSidebar({ drafts, selectedId, onSelect }: {
   return (
     <Paper variant="outlined" sx={{ width: 270, flexShrink: 0, overflow: 'auto' }}>
       <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-        <Typography fontWeight={700}>发票任务（{drafts.length}）</Typography>
-        <Typography variant="caption" color="text.secondary">未完成 {drafts.filter((row) => row.status !== 'saved').length} · 最近已保存 {drafts.filter((row) => row.status === 'saved').length}</Typography>
+        <Typography fontWeight={700}>待处理发票（{drafts.length}）</Typography>
+        <Typography variant="caption" color="text.secondary">已保存发票请到供应商发票管理查看</Typography>
       </Box>
       <List disablePadding>
         {drafts.map((draft) => {

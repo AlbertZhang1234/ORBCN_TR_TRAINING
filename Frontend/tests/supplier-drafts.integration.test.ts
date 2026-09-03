@@ -59,6 +59,9 @@ test('durable upload, background completion, restore, edits, atomic save, permis
       await assert.rejects(service.action(auth, restored.id, 'confirm', restored.version), /Invalid action/);
       const saved = await service.action(auth, restored.id, 'save', restored.version);
       assert.equal(saved.status, 'saved');
+      assert.deepEqual(await service.list(auth), []); // Saved invoices leave the recognition workbench.
+      assert.equal((await db.query('SELECT status FROM otto_supplier_invoice_drafts WHERE id=$1', [saved.id])).rows[0].status, 'saved');
+      assert.deepEqual(await new SupplierDraftService(repo, files, 1024).list(auth), []);
       assert.equal((await service.action(auth, restored.id, 'save', restored.version)).status, 'saved');
       assert.equal((await source.read(auth, null, 'CHANGED-INVOICE-NO')).bytes.toString(), draftOriginal.bytes.toString());
       await assert.rejects(source.read(other, null, 'CHANGED-INVOICE-NO'), /无权访问/);

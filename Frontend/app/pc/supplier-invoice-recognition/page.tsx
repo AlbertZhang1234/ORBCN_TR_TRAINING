@@ -73,7 +73,7 @@ export default function SupplierInvoiceRecognitionPage() {
         <DraftSidebar drafts={drafts} selectedId={selected?.id} onSelect={setSelectedId} />
         <Box sx={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
           {!selected ? <Paper variant="outlined" sx={{ p: 6, textAlign: 'center' }}>
-            {loading ? <CircularProgress /> : <Typography color="text.secondary">请先上传发票文件</Typography>}
+            {loading ? <CircularProgress /> : <Typography color="text.secondary">暂无待处理发票，可上传新文件；已保存发票请到供应商发票管理查看。</Typography>}
           </Paper> : <Stack spacing={1.5}>
             <Stack direction="row" alignItems="center" spacing={1}>
               <Typography sx={{ flex: 1 }}>{selected.filename}</Typography>

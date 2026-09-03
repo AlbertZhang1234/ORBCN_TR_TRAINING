@@ -19,10 +19,7 @@ export class SupplierDraftRepository {
   list(userid: string) {
     return this.transaction(async (db) => (await db.query<DraftRow>(
       `SELECT * FROM otto_supplier_invoice_drafts WHERE userid=$1
-       AND (status <> 'saved' OR id IN (
-         SELECT id FROM otto_supplier_invoice_drafts WHERE userid=$1 AND status='saved'
-         ORDER BY updated_at DESC LIMIT 20
-       )) ORDER BY created_at DESC`, [userid],
+       AND status <> 'saved' ORDER BY created_at DESC`, [userid],
     )).rows);
   }
   async claim(token: string): Promise<DraftRow | undefined> {

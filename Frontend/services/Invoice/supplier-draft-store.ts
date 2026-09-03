@@ -22,6 +22,8 @@ export class SupplierDraftStore {
   private pending = new Map<string, SupplierInvoiceDraft>();
   private writes = new Map<string, Promise<void>>();
   private conflicts = new Set<string>();
+  // A list requested before a save may arrive afterwards. Completed IDs must not reappear.
+  private completed = new Set<string>();
   private active = false;
   private refreshing = false;
   constructor(private readonly api: typeof supplierDraftApi) {}
@@ -32,6 +34,12 @@ export class SupplierDraftStore {
     this.listeners.forEach((fn) => fn());
   }
   private upsert(row: SupplierInvoiceDraft) {
+    if (row.status === 'saved') {
+      this.completed.add(row.id);
+      this.emit({ drafts: this.state.drafts.filter((item) => item.id !== row.id) });
+      return;
+    }
+    if (this.completed.has(row.id)) return;
     const current = this.state.drafts.find((item) => item.id === row.id);
     if (current && current.version > row.version) return;
     this.emit({ drafts: this.state.drafts.some((item) => item.id === row.id)
@@ -52,14 +60,20 @@ export class SupplierDraftStore {
   async refresh() {
     if (!this.active || this.refreshing) return;
     this.refreshing = true;
+    const before = new Map(this.state.drafts.map((row) => [row.id, row]));
     try {
       const rows = await this.api.list();
       const protectedIds = new Set([...this.pending.keys(), ...this.writes.keys(), ...this.state.busy]);
-      const drafts = rows.map((row) => {
+      const drafts = rows.filter((row) => row.status !== 'saved' && !this.completed.has(row.id)).map((row) => {
         const current = this.state.drafts.find((item) => item.id === row.id);
         return current && (protectedIds.has(row.id) || current.version > row.version) ? current : row;
       });
-      for (const row of this.state.drafts) if (!drafts.some((item) => item.id === row.id)) drafts.push(row);
+      // Drop tasks omitted by the server (e.g. saved in another tab), but preserve
+      // uploads/edits completed after this request began and any in-flight writes.
+      for (const row of this.state.drafts) {
+        if (!drafts.some((item) => item.id === row.id) && !this.completed.has(row.id)
+          && (protectedIds.has(row.id) || before.get(row.id) !== row)) drafts.push(row);
+      }
       this.emit({ drafts });
     } catch (error) { this.report(error); }
     finally { this.refreshing = false; }
@@ -124,12 +138,17 @@ export class SupplierDraftStore {
   }
   async saveAll(): Promise<BatchSaveResult> {
     if (this.state.savingAll) throw new Error('正在批量保存，请稍候');
-    const targets = this.state.drafts.filter((row) => row.status !== 'saved').map((row) => row.id);
+    const targets = this.state.drafts.filter((row) => row.status !== 'saved');
     const result: BatchSaveResult = { total: targets.length, saved: 0, skipped: [], failed: [] };
     this.emit({ savingAll: true, error: '' });
     try {
-      for (const id of targets) {
-        const row = this.row(id);
+      for (const target of targets) {
+        const id = target.id;
+        const row = this.state.drafts.find((item) => item.id === id);
+        if (!row) {
+          result.skipped.push({ filename: target.filename, reason: '已在其他页面保存或不再待处理' });
+          continue;
+        }
         if (['queued','recognizing','saved'].includes(row.status) || this.state.busy.includes(id)) {
           result.skipped.push({ filename: row.filename, reason: row.status === 'saved' ? '已保存' : '正在处理，请完成后再保存' });
           continue;

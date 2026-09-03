@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { IconButton, Tooltip } from '@mui/material';
+import { Alert, IconButton, Tooltip } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
@@ -20,6 +20,7 @@ import { variantService } from '../../../services/common/variant-service';
 import { normalizeWorkflowStatus } from '../../../services/_core/locks';
 import { formatDateOnly, readStatus, statusLabel } from '../invoices/_components/shared';
 import InvoicePreviewDialog from '../invoices/_components/InvoicePreviewDialog';
+import SupplierInvoiceEditDialog from './_components/SupplierInvoiceEditDialog';
 
 const defaultFilters: Record<string, FilterValue> = {
   invoiceno: { value: '', operator: 'contains' },
@@ -51,13 +52,19 @@ export default function SupplierInvoicesPage() {
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [loading, setLoading] = useState(false);
   const [previewNo, setPreviewNo] = useState('');
+  const [editNo, setEditNo] = useState('');
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
   const LAYOUT_KEY = 'pc_supplier_invoices_default_layout_v1';
 
   const load = async () => {
     setLoading(true);
+    setError('');
     try {
       // Supplier invoices intentionally use the existing invoice table for now.
       setRows(await listInvoices());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载发票列表失败');
     } finally {
       setLoading(false);
     }
@@ -161,16 +168,18 @@ export default function SupplierInvoicesPage() {
     { id: '_status', label: t('status', 'Status'), minWidth: 140, render: (value: unknown) => statusLabel(normalizeWorkflowStatus(String(value ?? '')), t) },
   ], [t]);
 
-  const action = (icon: ReactNode, label: string, disabled = false) => (
+  const action = (icon: ReactNode, label: string, disabled = false, onClick = noop) => (
     <Tooltip title={label}>
       <span>
-        <IconButton onClick={noop} disabled={disabled} aria-label={label}>{icon}</IconButton>
+        <IconButton onClick={onClick} disabled={disabled} aria-label={label}>{icon}</IconButton>
       </span>
     </Tooltip>
   );
 
   return (
     <PcContentLayout contentSx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {notice && <Alert severity="success" onClose={() => setNotice('')}>{notice}</Alert>}
+      {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
       <BusyStandardPage
         busy={loading}
         title={t('supplier_invoice_management', 'Supplier Invoice Management')}
@@ -206,12 +215,15 @@ export default function SupplierInvoicesPage() {
           onLayoutSave: handleSaveLayout,
           actions: [
             action(<AddRoundedIcon />, t('create_invoice', 'Create Invoice')),
-            action(<EditRoundedIcon />, t('edit_invoice', 'Edit Invoice'), selected.length !== 1),
+            action(<EditRoundedIcon />, t('edit_invoice', 'Edit Invoice'), loading || selected.length !== 1
+              || !filteredRows.some((row) => row.invoiceno === selected[0]), () => { setNotice(''); setEditNo(selected[0]); }),
             action(<DeleteRoundedIcon />, t('delete_invoice', 'Delete Invoice'), selected.length === 0),
             action(<FactCheckRoundedIcon />, t('book_invoice', 'Book Invoice'), selected.length === 0),
           ],
         }}
       />
+      {editNo && <SupplierInvoiceEditDialog key={editNo} invoiceNo={editNo} onClose={() => setEditNo('')} t={t}
+        onSaved={() => { setEditNo(''); setSelected([]); setNotice('发票抬头及行项目已保存'); void load(); }} />}
       <InvoicePreviewDialog open={Boolean(previewNo)} onClose={() => setPreviewNo('')} invoiceNo={previewNo} t={t}
         sourceUrl={`/api/supplier-invoices/source?invoiceNo=${encodeURIComponent(previewNo)}`} />
     </PcContentLayout>

@@ -54,6 +54,12 @@ export function buildPcMenuData(t: Translate) {
       icon: <SettingsRoundedIcon fontSize="small" />,
       children: [
         {
+          id: 'system_config',
+          title: t('system_config', 'System Configuration'),
+          href: '/pc/system-config',
+          icon: <SettingsRoundedIcon fontSize="small" />,
+        },
+        {
           id: 'users',
           title: t('users', 'User Management'),
           href: '/pc/users',

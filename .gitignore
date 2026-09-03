@@ -1,8 +1,10 @@
 # Node
 node_modules/
+.node_modules-shared/
 dist/
 build/
 .next/
+Frontend/.next-*/
 out/
 .env
 .env.local
@@ -32,6 +34,8 @@ Thumbs.db
 # Runtime artifacts
 .run/
 Frontend/data/
+Backend/log/*
+!Backend/log/.gitkeep
 old_db_dump.json
 
 # IDE

@@ -1,4 +1,8 @@
-__pycache__/
+.env
+.venv
+__pycache__
+**/__pycache__
+Tests
 *.pyc
 *.pyo
 *.pyd
@@ -8,4 +12,3 @@ __pycache__/
 .ruff_cache/
 .git/
 .gitignore
-Tests/

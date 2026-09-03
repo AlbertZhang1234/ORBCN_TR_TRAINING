@@ -3,10 +3,12 @@ import { createContext, useContext, useEffect, useState, useSyncExternalStore, t
 import { Alert, Snackbar } from '@mui/material';
 import { SupplierDraftStore } from '@/services/Invoice/supplier-draft-store';
 import { supplierDraftApi } from '@/services/Invoice/supplier-drafts';
+import { loadInvoiceBatchSettings } from '@/services/SystemConfig/client';
 
 const Context = createContext<SupplierDraftStore | null>(null);
 export function SupplierDraftProvider({ children }: PropsWithChildren) {
-  const [store] = useState(() => new SupplierDraftStore(supplierDraftApi));
+  const [store] = useState(() => new SupplierDraftStore(supplierDraftApi,
+    async () => (await loadInvoiceBatchSettings()).upload_concurrency));
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   useEffect(() => {
     const timer = setInterval(() => store.tick(), 3000);

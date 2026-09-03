@@ -1,4 +1,6 @@
 import type { supplierDraftApi } from './supplier-drafts';
+import { mapConcurrent } from '../_core/concurrency';
+import { defaultRecognitionSettings } from '../SystemConfig/model';
 import type { SupplierInvoiceDraft, SupplierBusinessType, EditableHeader, EditableLine } from './supplier-draft-model';
 
 export interface DraftStoreState {
@@ -8,6 +10,13 @@ export interface DraftStoreState {
   uploading: number;
   loading: boolean;
   error: string;
+  savingAll: boolean;
+}
+export interface BatchSaveResult {
+  total: number;
+  saved: number;
+  skipped: Array<{ filename: string; reason: string }>;
+  failed: Array<{ filename: string; reason: string }>;
   savingAll: boolean;
 }
 export interface BatchSaveResult {
@@ -26,7 +35,9 @@ export class SupplierDraftStore {
   private completed = new Set<string>();
   private active = false;
   private refreshing = false;
-  constructor(private readonly api: typeof supplierDraftApi) {}
+  private uploadTail: Promise<void> = Promise.resolve();
+  constructor(private readonly api: typeof supplierDraftApi,
+    private readonly uploadConcurrency: () => Promise<number> = async () => defaultRecognitionSettings.upload_concurrency) {}
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   private emit(patch: Partial<DraftStoreState>) {
@@ -85,14 +96,24 @@ export class SupplierDraftStore {
   }
   async upload(files: File[], businessType: SupplierBusinessType) {
     this.emit({ uploading: this.state.uploading + files.length, error: '' });
-    await Promise.all(files.map(async (file) => {
-      try { this.upsert(await this.api.upload(file, businessType)); }
-      catch (error) { this.report(new Error(`${file.name}：${error instanceof Error ? error.message : '上传失败'}`)); }
-      finally { this.emit({ uploading: this.state.uploading - 1 }); }
-    }));
+    const run = async () => {
+      let remaining = files.length;
+      try {
+        const limit = await this.uploadConcurrency();
+        await mapConcurrent(files, limit, async (file) => {
+          try { this.upsert(await this.api.upload(file, businessType)); }
+          catch (error) { this.report(new Error(`${file.name}：${error instanceof Error ? error.message : '上传失败'}`)); }
+          finally { remaining -= 1; this.emit({ uploading: this.state.uploading - 1 }); }
+        });
+      } catch (error) { this.report(error); }
+      finally { this.emit({ uploading: this.state.uploading - remaining }); }
+    };
+    this.uploadTail = this.uploadTail.then(run, run);
+    await this.uploadTail;
   }
   edit(id: string, patch: { header?: EditableHeader; lines?: EditableLine[] }) {
     const row = this.row(id);
+    if (this.state.savingAll || ['saved','recognizing','queued'].includes(row.status) || this.state.busy.includes(id)) return;
     if (this.state.savingAll || ['saved','recognizing','queued'].includes(row.status) || this.state.busy.includes(id)) return;
     const next: SupplierInvoiceDraft = { ...row, ...patch, status: 'editing', error: undefined };
     this.pending.set(id, next);
@@ -125,6 +146,7 @@ export class SupplierDraftStore {
     this.emit({});
     return promise;
   }
+  async action(id: string, action: 'save'|'retry') {
   async action(id: string, action: 'save'|'retry') {
     await this.flush(id);
     if (this.state.busy.includes(id)) throw new Error('该发票正在处理');

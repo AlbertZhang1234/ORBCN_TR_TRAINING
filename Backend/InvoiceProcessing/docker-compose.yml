@@ -11,10 +11,11 @@ services:
     environment:
       INVOICE_SERVICE_HOST: 0.0.0.0
       INVOICE_SERVICE_PORT: 8201
-      # MinerU may fail in constrained docker envs; keep fallback extractor stable.
-      INVOICE_DISABLE_MINERU: "1"
+      BACKEND_LOG_DIR: /app/log
       # Ensure container can reach host LLM endpoint.
       INVOICE_LLM_BASE_URL: http://host.docker.internal:8666/v1
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - ../log:/app/log
     restart: unless-stopped

@@ -42,4 +42,11 @@ export class SupplierDraftRepository {
       );
     });
   }
+  async requeue(id: string, token: string) {
+    return this.transaction(async (db) => {
+      await db.query(`UPDATE otto_supplier_invoice_drafts SET status='queued', lease_token=NULL,
+        lease_until=NULL, version=version+1, updated_at=now()
+        WHERE id=$1 AND lease_token=$2 AND status='recognizing'`, [id, token]);
+    });
+  }
 }

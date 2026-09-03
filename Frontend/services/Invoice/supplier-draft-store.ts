@@ -8,9 +8,16 @@ export interface DraftStoreState {
   uploading: number;
   loading: boolean;
   error: string;
+  savingAll: boolean;
+}
+export interface BatchSaveResult {
+  total: number;
+  saved: number;
+  skipped: Array<{ filename: string; reason: string }>;
+  failed: Array<{ filename: string; reason: string }>;
 }
 export class SupplierDraftStore {
-  private state: DraftStoreState = { drafts: [], busy: [], dirty: [], uploading: 0, loading: false, error: '' };
+  private state: DraftStoreState = { drafts: [], busy: [], dirty: [], uploading: 0, loading: false, error: '', savingAll: false };
   private listeners = new Set<() => void>();
   private pending = new Map<string, SupplierInvoiceDraft>();
   private writes = new Map<string, Promise<void>>();
@@ -72,7 +79,7 @@ export class SupplierDraftStore {
   }
   edit(id: string, patch: { header?: EditableHeader; lines?: EditableLine[] }) {
     const row = this.row(id);
-    if (['saved','recognizing','queued'].includes(row.status) || this.state.busy.includes(id)) return;
+    if (this.state.savingAll || ['saved','recognizing','queued'].includes(row.status) || this.state.busy.includes(id)) return;
     const next: SupplierInvoiceDraft = { ...row, ...patch, status: 'editing', error: undefined };
     this.pending.set(id, next);
     this.upsert(next);
@@ -104,7 +111,7 @@ export class SupplierDraftStore {
     this.emit({});
     return promise;
   }
-  async action(id: string, action: 'confirm'|'save'|'retry') {
+  async action(id: string, action: 'save'|'retry') {
     await this.flush(id);
     if (this.state.busy.includes(id)) throw new Error('该发票正在处理');
     this.emit({ busy: [...this.state.busy, id], error: '' });
@@ -114,6 +121,28 @@ export class SupplierDraftStore {
       return row;
     } catch (error) { this.report(error); throw error; }
     finally { this.emit({ busy: this.state.busy.filter((value) => value !== id) }); }
+  }
+  async saveAll(): Promise<BatchSaveResult> {
+    if (this.state.savingAll) throw new Error('正在批量保存，请稍候');
+    const targets = this.state.drafts.filter((row) => row.status !== 'saved').map((row) => row.id);
+    const result: BatchSaveResult = { total: targets.length, saved: 0, skipped: [], failed: [] };
+    this.emit({ savingAll: true, error: '' });
+    try {
+      for (const id of targets) {
+        const row = this.row(id);
+        if (['queued','recognizing','saved'].includes(row.status) || this.state.busy.includes(id)) {
+          result.skipped.push({ filename: row.filename, reason: row.status === 'saved' ? '已保存' : '正在处理，请完成后再保存' });
+          continue;
+        }
+        try {
+          await this.action(id, 'save'); // Flush pending edits, then reuse the single-invoice transaction.
+          result.saved += 1;
+        } catch (error) {
+          result.failed.push({ filename: row.filename, reason: error instanceof Error ? error.message : '保存失败' });
+        }
+      }
+      return result;
+    } finally { this.emit({ savingAll: false }); }
   }
   async reload(id: string) {
     await this.writes.get(id)?.catch(() => undefined);

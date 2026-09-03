@@ -4,7 +4,8 @@
 
 - 上传接口先把 PDF/PNG/JPEG 写入服务器持久化目录，再创建 `otto_supplier_invoice_drafts` 记录；响应成功才表示上传成功。
 - 草稿表记录上传人、原文件名、独立 UUID 文件键、MIME/大小、识别状态、识别原始结果、可编辑抬头/行项目 JSON、版本号和正式发票关联。
-- 草稿允许字段暂时不完整，修改自动写库；确认/正式保存才检查必填信息。
+- 草稿允许字段暂时不完整，修改自动写库；正式保存才检查必填信息，不再设置确认步骤。
+- “保存当前”保存当前发票；“保存全部”直接逐张保存全部未保存发票（先同步最新编辑）。识别中/排队中的任务跳过，校验或保存失败的草稿保留，并汇总成功、跳过、失败数量与原因；单张失败不影响其他发票。
 - 正式保存复用现有发票保存规则：在同一数据库事务内创建 `otto_invoices`、`otto_invoice_lines`，并更新草稿状态及 `saved_invoice_no`。相同草稿重试保存是幂等的，其他草稿撞发票号码不会覆盖已有发票。
 - 原文件只保存一份，文件键不依赖可修改的发票号码。正式保存不会复制/移动文件。
 
@@ -19,6 +20,7 @@ Next.js Node 服务启动时由 `instrumentation.ts` 注册后台轮询器。采
 ## 配置和上线
 
 1. 执行 `Backend/Database/migration/create_supplier_invoice_drafts.sql`。此表启用 RLS，无匿名客户端策略；服务数据库连接需为表所有者或具备相应服务权限。
+   已有部署还需在一个事务内执行 `remove_supplier_invoice_draft_confirmation.sql`，将历史已确认草稿改为待处理状态并移除确认状态约束；不删除草稿内容或原文件。
 2. `SUPPLIER_INVOICE_STORAGE_DIR`：建议生产显式设置到持久化卷；默认 `<Frontend工作目录>/data/supplier-originals`。
 3. `SUPPLIER_UPLOAD_MAX_MB`：默认 20 MB；需与识别服务限制协调。
 4. 部署新构建并重启 Next 服务，使后台注册入口生效；8201 识别服务继续保持运行。

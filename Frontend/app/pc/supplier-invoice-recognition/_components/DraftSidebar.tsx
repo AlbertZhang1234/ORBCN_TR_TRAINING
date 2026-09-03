@@ -6,7 +6,7 @@ import type { SupplierInvoiceDraft } from './model';
 const labels = {
   queued: ['排队中', 'info'],
   recognizing: ['识别中', 'info'], ready: ['待检查', 'warning'], editing: ['编辑中', 'primary'],
-  confirmed: ['已确认', 'success'], saving: ['保存中', 'info'], saved: ['已保存', 'success'], error: ['有错误', 'error'],
+  saved: ['已保存', 'success'], error: ['有错误', 'error'],
 } as const;
 
 export function DraftSidebar({ drafts, selectedId, onSelect }: {

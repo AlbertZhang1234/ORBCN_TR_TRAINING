@@ -12,7 +12,7 @@ export function SupplierDraftProvider({ children }: PropsWithChildren) {
     const timer = setInterval(() => store.tick(), 3000);
     const beforeUnload = (event: BeforeUnloadEvent) => {
       const state = store.getSnapshot();
-      if (state.dirty.length || state.uploading || state.busy.length) { event.preventDefault(); event.returnValue = ''; }
+      if (state.dirty.length || state.uploading || state.busy.length || state.savingAll) { event.preventDefault(); event.returnValue = ''; }
     };
     window.addEventListener('beforeunload', beforeUnload);
     return () => { clearInterval(timer); window.removeEventListener('beforeunload', beforeUnload); };

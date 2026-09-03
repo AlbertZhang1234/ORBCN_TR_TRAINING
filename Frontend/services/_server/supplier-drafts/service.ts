@@ -60,7 +60,7 @@ export class SupplierDraftService {
   }
 
   async action(auth: RequestAuthContext, id: string, action: string, version: number) {
-    if (!['confirm','retry','save'].includes(action) || !Number.isInteger(version))
+    if (!['retry','save'].includes(action) || !Number.isInteger(version))
       throw new ServiceError('Invalid action or version', { status: 400 });
     return this.repo.transaction(async (db) => {
       const row = await this.locked(db, auth, id);
@@ -78,7 +78,7 @@ export class SupplierDraftService {
       return draftView((await db.query<DraftRow>(
         `UPDATE otto_supplier_invoice_drafts SET status=$2, error=NULL, lease_token=NULL, lease_until=NULL,
          saved_invoice_no=$3, version=version+1, updated_at=now() WHERE id=$1 RETURNING *`,
-        [id, action === 'save' ? 'saved' : action === 'retry' ? 'queued' : 'confirmed',
+        [id, action === 'save' ? 'saved' : 'queued',
           action === 'save' ? row.header.invoiceno.trim() : null],
       )).rows[0]);
     });

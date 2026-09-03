@@ -25,36 +25,42 @@ export default function InvoiceImportSummary({ rows, t, lang }: InvoiceImportSum
 
   return (
     <Box component="section" aria-label={t('import_amount_summary', 'Amount Summary')}
-      sx={{ mx: 3, px: 2, py: 1.25, flexShrink: 0, borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
-      <Stack direction="row" useFlexGap flexWrap="wrap" spacing={1} alignItems="baseline">
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+      sx={{ mx: 3, px: 1.25, py: 0.5, flexShrink: 0, borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover',
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-end', textAlign: 'right',
+        fontSize: '0.75rem', lineHeight: 1.4 }}>
+      <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.75} alignItems="baseline" justifyContent="flex-end">
+        <Typography sx={{ fontSize: 'inherit', lineHeight: 'inherit', fontWeight: 600 }}>
           {t('import_amount_summary_count', 'Recognized total · {0} invoice(s)').replace('{0}', String(count))}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography color="text.secondary" sx={{ fontSize: '0.6875rem', lineHeight: 1.4 }}>
           {t('import_amount_summary_hint', 'By original currency; failed and skipped invoices excluded. Before currency conversion.')}
         </Typography>
       </Stack>
-      <Box sx={{ maxHeight: '18vh', overflowY: 'auto', mt: 0.75 }}>
+      <Box sx={{ maxWidth: '100%', maxHeight: 'min(12vh, 96px)', overflow: 'auto', mt: 0.25 }}>
         {groups.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
+          <Typography color="text.secondary" sx={{ fontSize: 'inherit', lineHeight: 'inherit' }}>
             {t('import_amount_summary_empty', 'No successfully recognized, non-skipped invoices to total.')}
           </Typography>
-        ) : groups.map((group) => (
-          <Box key={group.currency} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 3, rowGap: 0.5, py: 0.25 }}>
-            <Typography variant="body2" sx={{ minWidth: 112, fontWeight: 600 }}>
-              {group.currency || t('import_amount_summary_unknown_currency', 'Unknown currency')}
-              {' · '}{t('import_amount_summary_invoices', '{0} invoice(s)').replace('{0}', String(group.count))}
-            </Typography>
-            {importAmountFields.map((field) => (
-              <Typography key={field} variant="body2" sx={{ fontWeight: field === 'grossamount' ? 600 : 400, fontVariantNumeric: 'tabular-nums' }}>
-                {labels[field]}: {formatImportAmount(group.amounts[field], group.currency, lang)}
+        ) : <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, max-content)', columnGap: 1.5,
+          rowGap: 0.125, width: 'max-content', ml: 'auto', alignItems: 'baseline' }}>
+          {groups.map((group) => (
+            <React.Fragment key={group.currency}>
+              <Typography sx={{ fontSize: 'inherit', lineHeight: 'inherit', fontWeight: 600 }}>
+                {group.currency || t('import_amount_summary_unknown_currency', 'Unknown currency')}
+                {' · '}{t('import_amount_summary_invoices', '{0} invoice(s)').replace('{0}', String(group.count))}
               </Typography>
-            ))}
-          </Box>
-        ))}
+              {importAmountFields.map((field) => (
+                <Typography key={field} sx={{ fontSize: 'inherit', lineHeight: 'inherit',
+                  fontWeight: field === 'grossamount' ? 600 : 400, fontVariantNumeric: 'tabular-nums' }}>
+                  {labels[field]}: {formatImportAmount(group.amounts[field], group.currency, lang)}
+                </Typography>
+              ))}
+            </React.Fragment>
+          ))}
+        </Box>}
       </Box>
       {incomplete && (
-        <Typography variant="caption" color="text.secondary">
+        <Typography color="text.secondary" sx={{ fontSize: '0.6875rem', lineHeight: 1.4 }}>
           {t('import_amount_summary_incomplete', '— means an amount is missing or invalid; that total is unavailable.')}
         </Typography>
       )}

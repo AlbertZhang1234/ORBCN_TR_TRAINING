@@ -259,7 +259,7 @@ Table:
 
 `otto_supplier_invoice_drafts` 持久化上传任务、后台识别状态、原始识别结果、编辑草稿与正式发票关联。
 文件以 UUID 键存服务器持久化目录，数据库保存文件元信息，不保存二进制内容。
-`header` / `lines` 为 JSONB 草稿；正式确认保存仍写 `otto_invoices` / `otto_invoice_lines`。
+`header` / `lines` 为 JSONB 草稿；正式保存仍写 `otto_invoices` / `otto_invoice_lines`，不再设置确认步骤。
 表启用 RLS，仅经服务端鉴权访问；工作台按上传人隔离。部署细节见 `Frontend/docs/supplier-invoice-drafts.md`。
 
 otto_v_tr_all: 这是数据库中综合了所有报销单与发票相关数据的视图，可以通过它快速的查询数据

@@ -40,6 +40,7 @@ test('HTTP upload survives navigation, background completion and server restart;
         INSERT INTO otto_booking_rule VALUES('TEST',true,1)`);
       await db.query("INSERT INTO t_loginsessions VALUES($1,'http-user',now()+interval '1 hour',true,now(),now())", [session]);
       await db.query(await readFile('../Backend/Database/migration/create_supplier_invoice_drafts.sql', 'utf8'));
+      await db.query(await readFile('../Backend/Database/migration/create_system_config.sql', 'utf8'));
       await new Promise<void>((resolve) => fake.listen(0, '127.0.0.1', resolve));
       const fakePort = (fake.address() as { port: number }).port;
       const connection = new URL(process.env.DATABASE_URL!);
@@ -48,7 +49,7 @@ test('HTTP upload survives navigation, background completion and server restart;
       const start = async () => {
         child = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '--hostname','127.0.0.1','--port','18200'], {
           windowsHide: true, stdio: ['ignore','pipe','pipe'], env: { ...process.env,
-            DATABASE_URL: connection.toString(), NEXT_DIST_DIR: '.next-supplier-check',
+            DATABASE_URL: connection.toString(), NEXT_DIST_DIR: process.env.NEXT_DIST_DIR || '.next-supplier-check',
             SUPPLIER_INVOICE_STORAGE_DIR: root, SUPPLIER_DRAFT_WORKER_DISABLED: '0',
             INVOICE_PARSE_ENDPOINT: `http://127.0.0.1:${fakePort}/classify`,
           },

@@ -230,7 +230,7 @@ CREATE TABLE IF NOT EXISTS otto_supplier_invoice_drafts (
   content_type TEXT NOT NULL,
   file_size BIGINT NOT NULL CHECK (file_size > 0),
   status TEXT NOT NULL DEFAULT 'queued'
-    CHECK (status IN ('queued','recognizing','ready','editing','confirmed','saved','error')),
+    CHECK (status IN ('queued','recognizing','ready','editing','saved','error')),
   header JSONB NOT NULL DEFAULT '{}'::jsonb,
   lines JSONB NOT NULL DEFAULT '[]'::jsonb,
   recognized_result JSONB,
@@ -247,3 +247,21 @@ CREATE INDEX IF NOT EXISTS idx_supplier_drafts_user ON otto_supplier_invoice_dra
 CREATE INDEX IF NOT EXISTS idx_supplier_drafts_queue ON otto_supplier_invoice_drafts(status, lease_until, created_at);
 -- Access only through authenticated server services, never anonymous Supabase REST.
 ALTER TABLE otto_supplier_invoice_drafts ENABLE ROW LEVEL SECURITY;
+
+-- Administrator-managed settings and a shared admission gate for invoice recognition.
+CREATE TABLE IF NOT EXISTS otto_system_config (
+  key TEXT PRIMARY KEY,
+  value JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(value) = 'object'),
+  version INTEGER NOT NULL DEFAULT 1,
+  updated_by TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO otto_system_config(key) VALUES ('invoice_recognition') ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS otto_invoice_recognition_leases (
+  id UUID PRIMARY KEY,
+  expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_invoice_recognition_lease_expiry ON otto_invoice_recognition_leases(expires_at);
+ALTER TABLE otto_system_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE otto_invoice_recognition_leases ENABLE ROW LEVEL SECURITY;
+-- No anonymous policies: these tables are accessed by the server database role only.

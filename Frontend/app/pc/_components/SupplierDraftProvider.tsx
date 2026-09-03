@@ -3,16 +3,18 @@ import { createContext, useContext, useEffect, useState, useSyncExternalStore, t
 import { Alert, Snackbar } from '@mui/material';
 import { SupplierDraftStore } from '@/services/Invoice/supplier-draft-store';
 import { supplierDraftApi } from '@/services/Invoice/supplier-drafts';
+import { loadInvoiceBatchSettings } from '@/services/SystemConfig/client';
 
 const Context = createContext<SupplierDraftStore | null>(null);
 export function SupplierDraftProvider({ children }: PropsWithChildren) {
-  const [store] = useState(() => new SupplierDraftStore(supplierDraftApi));
+  const [store] = useState(() => new SupplierDraftStore(supplierDraftApi,
+    async () => (await loadInvoiceBatchSettings()).upload_concurrency));
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   useEffect(() => {
     const timer = setInterval(() => store.tick(), 3000);
     const beforeUnload = (event: BeforeUnloadEvent) => {
       const state = store.getSnapshot();
-      if (state.dirty.length || state.uploading || state.busy.length) { event.preventDefault(); event.returnValue = ''; }
+      if (state.dirty.length || state.uploading || state.busy.length || state.savingAll) { event.preventDefault(); event.returnValue = ''; }
     };
     window.addEventListener('beforeunload', beforeUnload);
     return () => { clearInterval(timer); window.removeEventListener('beforeunload', beforeUnload); };

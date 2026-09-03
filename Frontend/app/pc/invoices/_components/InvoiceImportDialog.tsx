@@ -15,6 +15,8 @@ import {
 } from '@mui/material';
 import { BusyTable } from '../../_components/TableLoadingMarquee';
 import { parseInvoice, type InvoiceParseResult } from '../../../../services/Invoice/parse';
+import { mapConcurrent } from '../../../../services/_core/concurrency';
+import { loadInvoiceBatchSettings } from '../../../../services/SystemConfig/client';
 import { saveInvoice } from '../../../../services/Invoice/save';
 import { saveRecognizedInvoiceLines } from '../../../../services/Invoice/lines';
 import { deleteInvoice } from '../../../../services/Invoice/delete';
@@ -158,8 +160,10 @@ export default function InvoiceImportDialog({
     setImportParsing(true);
     setImportMessage(t('parsing_files', 'Parsing files...'));
     try {
-      const parsedDrafts = await Promise.all(
-        files.map(async (file) => {
+      const settings = await loadInvoiceBatchSettings();
+      let completed = 0;
+      const parsedDrafts = await mapConcurrent(files, settings.interactive_concurrency,
+        async (file) => {
           try {
             const parsed = await parseInvoice(file, file.name);
             return buildImportDraft(file, parsed);
@@ -170,15 +174,14 @@ export default function InvoiceImportDialog({
               err instanceof Error ? err.message : '解析失败',
             );
           }
-        }),
+        },
+        (draft) => {
+          completed += 1;
+          setImportRows((current) => normalizeImportDrafts([...current, draft], existingInvoiceNoSet, t));
+          setImportMessage(t('parsing_progress', 'Recognized {0} / {1} files')
+            .replace('{0}', String(completed)).replace('{1}', String(files.length)));
+        },
       );
-
-      const nextRows = normalizeImportDrafts(
-        [...importRows, ...parsedDrafts],
-        existingInvoiceNoSet,
-        t
-      );
-      setImportRows(nextRows);
 
       const failed = parsedDrafts.filter((x) => x.parseError).length;
       const success = parsedDrafts.length - failed;
@@ -198,6 +201,8 @@ export default function InvoiceImportDialog({
           ).replace('{0}', String(missingDateCount)),
         );
       }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to start recognition');
     } finally {
       setImportParsing(false);
     }
@@ -680,7 +685,7 @@ export default function InvoiceImportDialog({
           >
             <BusyTable
               appId="pc-invoices"
-              busy={importParsing || savingImport}
+              busy={(importParsing && importRows.length === 0) || savingImport}
               title={t('import_preview', 'Import Preview')}
               columns={importColumns}
               rows={importTableRows}

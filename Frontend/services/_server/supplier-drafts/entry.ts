@@ -6,6 +6,8 @@ import { SupplierDraftService } from './service';
 import { SupplierSourceService } from './source';
 import { createInvoiceRecognitionClient } from '../invoiceRecognitionClient';
 import { processNextSupplierDraft, startSupplierDraftWorker } from './worker';
+import { systemConfigRuntime } from '../system-config/entry';
+import { backendLogDirectory, createInvoiceLogger } from '../invoice-log';
 
 export function supplierDraftRuntime() {
   const legacyRoot = path.resolve(process.cwd(), 'data');
@@ -20,8 +22,11 @@ export function supplierDraftRuntime() {
 export function registerSupplierDraftWorker() {
   const { repo, files } = supplierDraftRuntime();
   const recognize = createInvoiceRecognitionClient();
+  const { repository } = systemConfigRuntime();
+  const log = createInvoiceLogger(backendLogDirectory(process.cwd(), process.env.BACKEND_LOG_DIR));
   return startSupplierDraftWorker(
     () => processNextSupplierDraft(repo, files, recognize),
-    () => console.error('[supplier-drafts] Worker database/storage unavailable; will retry.'),
+    () => { void log('supplier_worker_error', { error_type: 'database_or_storage' }); },
+    async () => (await repository.read()).values.worker_concurrency,
   );
 }

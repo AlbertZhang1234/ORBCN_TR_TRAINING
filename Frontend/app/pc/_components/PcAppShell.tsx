@@ -12,6 +12,7 @@ import { performClientLogout } from '../../../services/Auth/logoutClient';
 import { SupplierDraftProvider } from './SupplierDraftProvider';
 
 const pageTitles: Record<string, [string, string]> = {
+  '/pc/system-config': ['system_config', 'System Configuration'],
   '/pc/home': ['home', 'Home'],
   '/pc/users': ['users', 'User Management'],
   '/pc/roles': ['roles', 'Role Management'],

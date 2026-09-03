@@ -37,6 +37,7 @@ import {
 import { useMessageBox } from '../../_components/useMessageBox';
 import { useRouter } from 'next/navigation';
 import InvoiceImportSetupPanel from './InvoiceImportSetupPanel';
+import InvoiceImportSummary from './InvoiceImportSummary';
 
 interface Option {
   value: string;
@@ -691,6 +692,7 @@ export default function InvoiceImportDialog({
           </Box>
         </Stack>
       </DialogContent>
+      <InvoiceImportSummary rows={importRows} t={t} lang={lang} />
       <DialogActions>
         <Button onClick={closeImportDialog} disabled={importParsing || savingImport}>
           {t('close', 'Close')}

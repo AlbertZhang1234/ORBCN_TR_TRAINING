@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { requireApiAuth } from '@/services/_server/apiAuth';
 import { canAccessReimbursementHeader, readRowString } from '@/services/TravelReimbursement/access';
 import { notifyFinanceOfApprovedReimbursement } from '@/services/TravelReimbursement/notifyFinance';
+import { financeNotificationDependencies } from '@/services/_server/financeNotificationDependencies';
 
 interface ReimbursementHeaderRow extends Record<string, unknown> {
   id?: number;
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
     const result = await notifyFinanceOfApprovedReimbursement({
       reimbursementId,
       reimbursementNo,
-    });
+    }, financeNotificationDependencies());
 
     return NextResponse.json({ ...result, requestId }, { status: 200 });
   } catch (error) {

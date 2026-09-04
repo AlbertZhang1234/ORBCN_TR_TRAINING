@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { withTransaction } from '../../../lib/db';
 import { SupplierDraftRepository } from './repository';
 import { SupplierDraftFiles } from './files';
@@ -6,17 +5,18 @@ import { SupplierDraftService } from './service';
 import { SupplierSourceService } from './source';
 import { createInvoiceRecognitionClient } from '../invoiceRecognitionClient';
 import { processNextSupplierDraft, startSupplierDraftWorker } from './worker';
+import { invoiceAttachmentRuntime } from '../invoice-attachments/entry';
 import { systemConfigRuntime } from '../system-config/entry';
 import { backendLogDirectory, createInvoiceLogger } from '../invoice-log';
 
 export function supplierDraftRuntime() {
-  const legacyRoot = path.resolve(process.cwd(), 'data');
-  const root = path.resolve(process.env.SUPPLIER_INVOICE_STORAGE_DIR || path.join(legacyRoot, 'supplier-originals'));
   const repo = new SupplierDraftRepository(withTransaction);
-  const files = new SupplierDraftFiles(root, legacyRoot);
+  const attachmentRuntime = invoiceAttachmentRuntime();
+  const files: SupplierDraftFiles = attachmentRuntime.files;
   const maxMb = Number(process.env.SUPPLIER_UPLOAD_MAX_MB || 20);
   const maxBytes = (Number.isFinite(maxMb) && maxMb > 0 ? maxMb : 20) * 1024 * 1024;
-  return { repo, files, service: new SupplierDraftService(repo, files, maxBytes), source: new SupplierSourceService(repo, files) };
+  return { repo, files, service: new SupplierDraftService(repo, files, maxBytes, attachmentRuntime.repo),
+    source: new SupplierSourceService(repo, files, attachmentRuntime.service) };
 }
 
 export function registerSupplierDraftWorker() {

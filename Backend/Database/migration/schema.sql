@@ -227,6 +227,7 @@ CREATE TABLE IF NOT EXISTS otto_supplier_invoice_drafts (
   userid TEXT NOT NULL,
   filename TEXT NOT NULL,
   storage_key TEXT NOT NULL UNIQUE,
+  storage_kind TEXT NOT NULL DEFAULT 'managed' CHECK (storage_kind IN ('managed','legacy-supplier')),
   content_type TEXT NOT NULL,
   file_size BIGINT NOT NULL CHECK (file_size > 0),
   status TEXT NOT NULL DEFAULT 'queued'
@@ -247,6 +248,21 @@ CREATE INDEX IF NOT EXISTS idx_supplier_drafts_user ON otto_supplier_invoice_dra
 CREATE INDEX IF NOT EXISTS idx_supplier_drafts_queue ON otto_supplier_invoice_drafts(status, lease_until, created_at);
 -- Access only through authenticated server services, never anonymous Supabase REST.
 ALTER TABLE otto_supplier_invoice_drafts ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS otto_invoice_attachments (
+  id UUID PRIMARY KEY,
+  invoiceno TEXT NOT NULL UNIQUE REFERENCES otto_invoices(invoiceno) ON DELETE CASCADE,
+  storage_kind TEXT NOT NULL CHECK (storage_kind IN ('managed','legacy-invoice','legacy-supplier')),
+  storage_key TEXT NOT NULL,
+  original_filename TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  file_size BIGINT NOT NULL CHECK (file_size > 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (storage_kind, storage_key)
+);
+CREATE INDEX IF NOT EXISTS idx_invoice_attachments_invoice ON otto_invoice_attachments(invoiceno);
+ALTER TABLE otto_invoice_attachments ENABLE ROW LEVEL SECURITY;
 
 -- Administrator-managed settings and a shared admission gate for invoice recognition.
 CREATE TABLE IF NOT EXISTS otto_system_config (

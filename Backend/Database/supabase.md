@@ -201,9 +201,10 @@ Table:
         - **收件人**: 财务邮箱 (配置在环境变量 `NEXT_PUBLIC_TR_RECEIVER`，默认 `financechina@orbis-group.com`)。
         - **主题**: `TR_{流水号}` (例如 `TR_10001`)。
     - **附件处理**:
-        - **文件源**: 系统后端 `data` 目录 (`Frontend/data`)。
-        - **匹配逻辑**: 根据报销单行明细中的 `invoiceno` 查找对应的发票文件。
-        - **文件命名**: 发票文件名需包含发票号（系统会自动匹配并清理文件名中的特殊字符）。
+        - **统一元数据**: 普通报销发票与供应商发票均通过 `otto_invoice_attachments` 关联正式发票和原文件。
+        - **文件源**: 新文件存于 `INVOICE_ATTACHMENT_STORAGE_DIR` 的持久化卷，数据库不保存二进制内容。
+        - **邮件读取**: 根据报销单行明细的 `invoiceno` 从统一附件服务取文件，不再自行扫描目录。
+        - **历史兼容**: 原 `Frontend/data/<发票号>.*` 文件按需登记；供应商旧 UUID 文件由迁移脚本登记，不要求上线时搬迁。
 
 
 
@@ -261,5 +262,12 @@ Table:
 文件以 UUID 键存服务器持久化目录，数据库保存文件元信息，不保存二进制内容。
 `header` / `lines` 为 JSONB 草稿；正式保存仍写 `otto_invoices` / `otto_invoice_lines`，不再设置确认步骤。
 表启用 RLS，仅经服务端鉴权访问；工作台按上传人隔离。部署细节见 `Frontend/docs/supplier-invoice-drafts.md`。
+
+## 统一发票附件
+
+`otto_invoice_attachments` 保存所有正式发票的原文件元数据，一张发票当前最多一个原始附件。
+新附件使用 UUID 存储键，普通报销与供应商的保存、预览、财务邮件和发票删除均复用统一服务。
+执行 `create_invoice_attachments.sql` 完成建表和已有供应商附件回填；完整部署及兼容说明见
+`Frontend/docs/invoice-attachments.md`。
 
 otto_v_tr_all: 这是数据库中综合了所有报销单与发票相关数据的视图，可以通过它快速的查询数据

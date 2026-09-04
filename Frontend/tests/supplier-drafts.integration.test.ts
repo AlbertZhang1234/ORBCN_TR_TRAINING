@@ -10,6 +10,8 @@ import { SupplierDraftFiles } from '../services/_server/supplier-drafts/files';
 import { SupplierDraftService } from '../services/_server/supplier-drafts/service';
 import { SupplierSourceService } from '../services/_server/supplier-drafts/source';
 import { processNextSupplierDraft } from '../services/_server/supplier-drafts/worker';
+import { InvoiceAttachmentRepository } from '../services/_server/invoice-attachments/repository';
+import { InvoiceAttachmentService } from '../services/_server/invoice-attachments/service';
 import type { RequestAuthContext } from '../services/_server/requestAuth';
 
 const auth: RequestAuthContext = { userid: 'test-owner', sessionId: 'test', roleids: [], permissions: { isAdmin: false, isFinance: false, isProjectManager: false } };
@@ -30,19 +32,22 @@ test('durable upload, background completion, restore, edits, atomic save, permis
       await db.query('CREATE TABLE otto_invoices (LIKE public.otto_invoices INCLUDING ALL)');
       await db.query('CREATE TABLE otto_invoice_lines (LIKE public.otto_invoice_lines INCLUDING ALL)');
       await db.query(await readFile(path.resolve('../Backend/Database/migration/create_supplier_invoice_drafts.sql'), 'utf8'));
+      await db.query(await readFile(path.resolve('../Backend/Database/migration/create_invoice_attachments.sql'), 'utf8'));
       const repo = new SupplierDraftRepository(async (work) => {
         const point = `sp${++savepoint}`;
         await db.query(`SAVEPOINT ${point}`);
         try { const result = await work(db as unknown as pg.PoolClient); await db.query(`RELEASE SAVEPOINT ${point}`); return result; }
         catch (error) { await db.query(`ROLLBACK TO SAVEPOINT ${point}`); throw error; }
       });
-      const files = new SupplierDraftFiles(root, root);
-      const service = new SupplierDraftService(repo, files, 1024 * 1024);
-      const source = new SupplierSourceService(repo, files);
+      const files = new SupplierDraftFiles(root, root, root);
+      const attachmentRepo = new InvoiceAttachmentRepository(repo.transaction);
+      const attachmentService = new InvoiceAttachmentService(attachmentRepo, files, 1024 * 1024);
+      const service = new SupplierDraftService(repo, files, 1024 * 1024, attachmentRepo);
+      const source = new SupplierSourceService(repo, files, attachmentService);
       const pdf = new File(['%PDF-1.4\ntest fixture'], 'original.pdf', { type: 'application/pdf' });
       const uploaded = await service.upload(auth, pdf, '01');
       assert.equal(uploaded.status, 'queued');
-      assert.equal((await new SupplierDraftService(repo, files, 1024).list(auth))[0].id, uploaded.id);
+      assert.equal((await new SupplierDraftService(repo, files, 1024, attachmentRepo).list(auth))[0].id, uploaded.id);
       assert.equal((await service.list(other)).length, 0);
       assert.equal(await processNextSupplierDraft(repo, files, async () => parsed), true);
       let restored = (await service.list(auth))[0];
@@ -61,13 +66,16 @@ test('durable upload, background completion, restore, edits, atomic save, permis
       assert.equal(saved.status, 'saved');
       assert.deepEqual(await service.list(auth), []); // Saved invoices leave the recognition workbench.
       assert.equal((await db.query('SELECT status FROM otto_supplier_invoice_drafts WHERE id=$1', [saved.id])).rows[0].status, 'saved');
-      assert.deepEqual(await new SupplierDraftService(repo, files, 1024).list(auth), []);
+      assert.deepEqual(await new SupplierDraftService(repo, files, 1024, attachmentRepo).list(auth), []);
       assert.equal((await service.action(auth, restored.id, 'save', restored.version)).status, 'saved');
       assert.equal((await source.read(auth, null, 'CHANGED-INVOICE-NO')).bytes.toString(), draftOriginal.bytes.toString());
       await assert.rejects(source.read(other, null, 'CHANGED-INVOICE-NO'), /无权访问/);
       const invoice = (await db.query('SELECT * FROM otto_invoices')).rows[0];
       assert.equal(invoice.businesstype, '02');
       assert.equal(invoice.userid, auth.userid);
+      const attachment = (await db.query('SELECT * FROM otto_invoice_attachments')).rows[0];
+      assert.equal(attachment.invoiceno, 'CHANGED-INVOICE-NO');
+      assert.equal(attachment.storage_kind, 'managed');
       assert.equal((await db.query('SELECT * FROM otto_invoice_lines')).rows[0].description, 'Edited item');
       const second = await service.upload(auth, pdf, '01');
       await db.query("UPDATE otto_supplier_invoice_drafts SET status='recognizing',lease_until=now()-interval '1 minute' WHERE id=$1", [second.id]);
@@ -97,7 +105,7 @@ test('durable upload, background completion, restore, edits, atomic save, permis
       await writeFile(path.join(root, 'LEGACY.pdf'), '%PDF-1.4\nlegacy fixture');
       assert.equal((await source.read(auth, null, 'LEGACY')).bytes.toString(), '%PDF-1.4\nlegacy fixture');
       await assert.rejects(service.upload(auth, pdf, '03'), /01 或 02/);
-      assert.throws(() => files.read('../escape.pdf'), /Invalid file key/);
+      assert.throws(() => files.read('managed', '../escape.pdf'), /Invalid managed file key/);
     } finally {
       await db.query('ROLLBACK');
       await db.end();

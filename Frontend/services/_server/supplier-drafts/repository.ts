@@ -1,10 +1,12 @@
 import type pg from 'pg';
 import type { SupplierInvoiceDraft } from '../../Invoice/supplier-draft-model';
+import type { StorageKind } from '../invoice-attachments/files';
 
 export type Transaction = <T>(work: (client: pg.PoolClient) => Promise<T>) => Promise<T>;
 export interface DraftRow extends SupplierInvoiceDraft {
   userid: string;
   storage_key: string;
+  storage_kind: Extract<StorageKind, 'managed' | 'legacy-supplier'>;
   content_type: string;
   file_size: number;
   lease_token?: string;

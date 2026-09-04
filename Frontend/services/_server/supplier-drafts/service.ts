@@ -6,11 +6,12 @@ import { emptyHeader, lineForSave, validateDraft, type EditableHeader, type Edit
 import { createSupplierInvoiceWithLines } from '../supplierInvoiceRecognition';
 import { SupplierDraftRepository, draftView, type DraftRow } from './repository';
 import { SupplierDraftFiles } from './files';
+import { InvoiceAttachmentRepository } from '../invoice-attachments/repository';
 import { draftContent, requireDraftId } from './validation';
 
 export class SupplierDraftService {
   constructor(private readonly repo: SupplierDraftRepository, private readonly files: SupplierDraftFiles,
-    private readonly maxBytes: number) {}
+    private readonly maxBytes: number, private readonly attachments: InvoiceAttachmentRepository) {}
 
   async list(auth: RequestAuthContext) { return (await this.repo.list(auth.userid)).map(draftView); }
 
@@ -21,13 +22,13 @@ export class SupplierDraftService {
     const stored = await this.files.store(id, Buffer.from(await file.arrayBuffer()));
     try {
       return await this.repo.transaction(async (db) => draftView((await db.query<DraftRow>(
-        `INSERT INTO otto_supplier_invoice_drafts(id,userid,filename,storage_key,content_type,file_size,header)
-         VALUES($1,$2,$3,$4,$5,$6,$7::jsonb) RETURNING *`,
-        [id,auth.userid,file.name.slice(0,255),stored.storage_key,stored.content_type,file.size,
+        `INSERT INTO otto_supplier_invoice_drafts(id,userid,filename,storage_key,storage_kind,content_type,file_size,header)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb) RETURNING *`,
+        [id,auth.userid,file.name.slice(0,255),stored.storage_key,stored.storage_kind,stored.content_type,file.size,
           JSON.stringify(emptyHeader(businessType as '01'|'02'))],
       )).rows[0]));
     } catch (error) {
-      await this.files.remove(stored.storage_key).catch(() => undefined);
+      await this.files.remove(stored.storage_kind, stored.storage_key).catch(() => undefined);
       throw error;
     }
   }
@@ -72,8 +73,11 @@ export class SupplierDraftService {
         if (errors.length) throw new ServiceError(errors.join('；'), { status: 400 });
       }
       if (action === 'save') {
-        await this.files.read(row.storage_key); // Do not create an invoice with a missing attachment.
+        await this.files.read(row.storage_kind, row.storage_key); // Do not create an invoice with a missing attachment.
         await createSupplierInvoiceWithLines({ withTransaction: (work) => work(db) }, auth, row.header, row.lines.map(lineForSave));
+        await this.attachments.replace(db, { id: row.id, invoiceno: row.header.invoiceno.trim(),
+          storage_kind: row.storage_kind, storage_key: row.storage_key, original_filename: row.filename,
+          content_type: row.content_type, file_size: row.file_size });
       }
       return draftView((await db.query<DraftRow>(
         `UPDATE otto_supplier_invoice_drafts SET status=$2, error=NULL, lease_token=NULL, lease_until=NULL,

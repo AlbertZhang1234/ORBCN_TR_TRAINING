@@ -7,7 +7,7 @@
 - 草稿允许字段暂时不完整，修改自动写库；正式保存才检查必填信息，不再设置确认步骤。
 - “保存当前”保存当前发票；“保存全部”直接逐张保存全部未保存发票（先同步最新编辑）。识别中/排队中的任务跳过，校验或保存失败的草稿保留，并汇总成功、跳过、失败数量与原因；单张失败不影响其他发票。
 - 正式保存复用现有发票保存规则：在同一数据库事务内创建 `otto_invoices`、`otto_invoice_lines`，并更新草稿状态及 `saved_invoice_no`。相同草稿重试保存是幂等的，其他草稿撞发票号码不会覆盖已有发票。
-- 原文件只保存一份，文件键不依赖可修改的发票号码。正式保存不会复制/移动文件。
+- 原文件只保存一份，文件键不依赖可修改的发票号码。正式保存不会复制/移动文件，并在同一事务内写入统一的 `otto_invoice_attachments` 正式附件关联。附件架构见 `invoice-attachments.md`。
 
 ## 后台任务
 
@@ -19,10 +19,10 @@ Next.js Node 服务启动时由 `instrumentation.ts` 注册后台轮询器。采
 
 ## 配置和上线
 
-1. 执行 `Backend/Database/migration/create_supplier_invoice_drafts.sql`。此表启用 RLS，无匿名客户端策略；服务数据库连接需为表所有者或具备相应服务权限。
+1. 执行 `Backend/Database/migration/create_supplier_invoice_drafts.sql` 和 `create_invoice_attachments.sql`。两张表均启用 RLS，无匿名客户端策略；服务数据库连接需为表所有者或具备相应服务权限。
    已有部署还需在一个事务内执行 `remove_supplier_invoice_draft_confirmation.sql`，将历史已确认草稿改为待处理状态并移除确认状态约束；不删除草稿内容或原文件。
-2. `SUPPLIER_INVOICE_STORAGE_DIR`：建议生产显式设置到持久化卷；默认 `<Frontend工作目录>/data/supplier-originals`。
-3. `SUPPLIER_UPLOAD_MAX_MB`：默认 20 MB；需与识别服务限制协调。
+2. `INVOICE_ATTACHMENT_STORAGE_DIR`：两个发票入口的新文件共用的持久化卷；默认 `<Frontend工作目录>/data/invoice-attachments`。`SUPPLIER_INVOICE_STORAGE_DIR` 仅用于兼容历史供应商文件。
+3. `INVOICE_ATTACHMENT_MAX_MB`：默认 20 MB；未设置时兼容 `SUPPLIER_UPLOAD_MAX_MB`，需与识别服务限制协调。
 4. 部署新构建并重启 Next 服务，使后台注册入口生效；8201 识别服务继续保持运行。
 5. 多实例必须共享同一文件存储目录/卷。数据库和原文件目录都应备份，不能只备份数据库。
 
@@ -34,7 +34,7 @@ Next.js Node 服务启动时由 `instrumentation.ts` 注册后台轮询器。采
 
 多标签页用版本号检查，冲突返回 409；不会静默覆盖另一个页面的内容。可以明确放弃本地未同步内容并重新加载服务器草稿。
 
-待处理页面的“查看原始文件”按草稿 ID 校验上传人；管理页点击发票号码按正式发票 ID 校验上传人或管理员/财务权限，且只允许业务类型 01/02。历史供应商发票可回退读取旧 `data/<发票号>.<扩展名>` 文件；不存在的原文件明确提示错误。原先未正式保存且已丢失的浏览器内存草稿无法追溯恢复。
+待处理页面的“查看原始文件”按草稿 ID 校验上传人；管理页通过统一正式附件关联读取，校验发票所属用户、管理员、财务或项目经理权限。历史供应商 UUID 文件由迁移登记，历史普通 `data/<发票号>.<扩展名>` 文件按需登记；不存在的原文件明确提示错误。原先未正式保存且已丢失的浏览器内存草稿无法追溯恢复。
 
 ## 验证
 

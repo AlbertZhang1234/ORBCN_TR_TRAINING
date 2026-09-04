@@ -5,6 +5,7 @@ import { requireApiAuth } from '@/services/_server/apiAuth';
 import { canActAsApprover } from '@/services/TravelReimbursement/access';
 import { notifyFinanceOfApprovedReimbursement } from '@/services/TravelReimbursement/notifyFinance';
 import { notifyApplicantOfReimbursementDecision } from '@/services/TravelReimbursement/notifyApplicant';
+import { financeNotificationDependencies } from '@/services/_server/financeNotificationDependencies';
 
 interface ApprovePayload {
   reimbursementId?: number | string;
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
 
     if (result.nextStatus === 'APPROVED' && !result.wasApproved && headerId) {
       try {
-        await notifyFinanceOfApprovedReimbursement({ reimbursementId: headerId });
+        await notifyFinanceOfApprovedReimbursement({ reimbursementId: headerId }, financeNotificationDependencies());
       } catch {
         // Keep approval result successful even when email fails.
       }

@@ -17,13 +17,6 @@ export interface BatchSaveResult {
   saved: number;
   skipped: Array<{ filename: string; reason: string }>;
   failed: Array<{ filename: string; reason: string }>;
-  savingAll: boolean;
-}
-export interface BatchSaveResult {
-  total: number;
-  saved: number;
-  skipped: Array<{ filename: string; reason: string }>;
-  failed: Array<{ filename: string; reason: string }>;
 }
 export class SupplierDraftStore {
   private state: DraftStoreState = { drafts: [], busy: [], dirty: [], uploading: 0, loading: false, error: '', savingAll: false };
@@ -146,7 +139,6 @@ export class SupplierDraftStore {
     this.emit({});
     return promise;
   }
-  async action(id: string, action: 'save'|'retry') {
   async action(id: string, action: 'save'|'retry') {
     await this.flush(id);
     if (this.state.busy.includes(id)) throw new Error('该发票正在处理');

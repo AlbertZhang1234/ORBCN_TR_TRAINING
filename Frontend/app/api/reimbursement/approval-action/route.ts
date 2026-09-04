@@ -3,6 +3,7 @@ import { query } from '@/lib/db';
 import { approveTravelReimbursementOnServer } from '@/services/TravelReimbursement/serverApproval';
 import { ServiceError } from '@/services/_core/error';
 import { notifyFinanceOfApprovedReimbursement } from '@/services/TravelReimbursement/notifyFinance';
+import { financeNotificationDependencies } from '@/services/_server/financeNotificationDependencies';
 import { notifyApplicantOfReimbursementDecision } from '@/services/TravelReimbursement/notifyApplicant';
 
 interface ApprovalTokenRow {
@@ -210,7 +211,7 @@ async function processApproval(token: string, action: ApprovalAction, rejectionC
 
     if (approval.nextStatus === 'APPROVED' && !approval.wasApproved) {
       try {
-        await notifyFinanceOfApprovedReimbursement({ reimbursementId });
+        await notifyFinanceOfApprovedReimbursement({ reimbursementId }, financeNotificationDependencies());
       } catch {
         // Do not fail approval result page when finance email sending fails.
       }

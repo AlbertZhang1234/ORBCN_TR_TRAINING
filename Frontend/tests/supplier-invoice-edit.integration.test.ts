@@ -13,6 +13,8 @@ import { createSupplierInvoiceWithLines } from '../services/_server/supplierInvo
 import type { RequestAuthContext } from '../services/_server/requestAuth';
 import { emptyHeader } from '../services/Invoice/supplier-draft-model';
 import { supplierInvoiceContent } from '../services/Invoice/supplier-edit-model';
+import { InvoiceAttachmentRepository } from '../services/_server/invoice-attachments/repository';
+import { InvoiceAttachmentService } from '../services/_server/invoice-attachments/service';
 
 const auth: RequestAuthContext = { userid: 'owner', sessionId: 'test', roleids: [],
   permissions: { isAdmin: false, isFinance: false, isProjectManager: false } };
@@ -42,21 +44,24 @@ test('saved supplier invoices edit atomically, preserve originals on rename and 
       await db.query(`CREATE TABLE otto_invoices (LIKE public.otto_invoices INCLUDING ALL);
         CREATE TABLE otto_invoice_lines (LIKE public.otto_invoice_lines INCLUDING ALL);
         CREATE TABLE otto_user(userid text PRIMARY KEY);
-        CREATE TABLE otto_travelentry(travelid text PRIMARY KEY);
+        CREATE TABLE otto_travelentry(travelid text PRIMARY KEY, projectid text);
         CREATE TABLE otto_tr_t(id integer, invoiceno text REFERENCES otto_invoices(invoiceno));
         ALTER TABLE otto_invoice_lines ADD FOREIGN KEY(invoiceno) REFERENCES otto_invoices(invoiceno) ON DELETE CASCADE;
         ALTER TABLE otto_invoices ADD FOREIGN KEY(travelid) REFERENCES otto_travelentry(travelid);
         INSERT INTO otto_user VALUES('owner'),('other'); INSERT INTO otto_travelentry VALUES('TR-1');`);
       await db.query(await readFile('../Backend/Database/migration/create_supplier_invoice_drafts.sql', 'utf8'));
+      await db.query(await readFile('../Backend/Database/migration/create_invoice_attachments.sql', 'utf8'));
       const repo = new SupplierDraftRepository(async (work) => {
         const point = `sp${++savepoint}`;
         await db.query(`SAVEPOINT ${point}`);
         try { const result = await work(db as unknown as pg.PoolClient); await db.query(`RELEASE SAVEPOINT ${point}`); return result; }
         catch (error) { await db.query(`ROLLBACK TO SAVEPOINT ${point}`); throw error; }
       });
-      const files = new SupplierDraftFiles(root, root);
-      const service = new SupplierInvoiceEditService(repo.transaction, files);
-      const source = new SupplierSourceService(repo, files);
+      const files = new SupplierDraftFiles(root, root, root);
+      const attachmentRepo = new InvoiceAttachmentRepository(repo.transaction);
+      const attachmentService = new InvoiceAttachmentService(attachmentRepo, files, 1024 * 1024);
+      const service = new SupplierInvoiceEditService(repo.transaction, files, attachmentRepo);
+      const source = new SupplierSourceService(repo, files, attachmentService);
       await createSupplierInvoiceWithLines({ withTransaction: repo.transaction }, auth,
         { ...emptyHeader('01'), invoiceno: 'ORIGINAL', supplier: 'Supplier', invoicedate: '2026-09-03', grossamount: 113 },
         [{ description: 'Item', quantity: 1, unit_price: 100, amount_excl_tax: 100, amount_incl_tax: 113, tax_rate: '13%' }]);
@@ -104,12 +109,12 @@ test('saved supplier invoices edit atomically, preserve originals on rename and 
       assert.equal((await db.query('SELECT invoiceno FROM otto_tr_t')).rows[0].invoiceno, 'RENAMED');
       assert.equal((await source.read(auth, null, 'RENAMED')).bytes.toString(), '%PDF-1.4\noriginal fixture');
       await assert.rejects(source.read(other, null, 'RENAMED'), /无权访问/);
-      const draft = (await db.query('SELECT * FROM otto_supplier_invoice_drafts')).rows[0];
-      assert.equal(draft.header.invoiceno, 'RENAMED');
-      assert.equal(draft.lines[0].description, 'Copied item');
+      const attachment = (await db.query('SELECT * FROM otto_invoice_attachments')).rows[0];
+      assert.equal(attachment.invoiceno, 'RENAMED');
+      assert.equal(attachment.storage_kind, 'legacy-invoice');
       detail = await service.save(auth, 'RENAMED', { ...renamed, header: { ...renamed.header, invoiceno: 'RENAMED-AGAIN' } });
       assert.equal((await source.read(finance, null, 'RENAMED-AGAIN')).bytes.toString(), '%PDF-1.4\noriginal fixture');
-      assert.equal((await db.query('SELECT * FROM otto_supplier_invoice_drafts')).rowCount, 1);
+      assert.equal((await db.query('SELECT * FROM otto_invoice_attachments')).rowCount, 1);
       await db.query("INSERT INTO otto_invoices(invoiceno,userid,businesstype) VALUES('DUPLICATE','owner','01')");
       await assert.rejects(service.save(auth, 'RENAMED-AGAIN', { ...detail, header: { ...detail.header, invoiceno: 'DUPLICATE' } }), /已存在/);
       assert.deepEqual(await service.load(auth, 'RENAMED-AGAIN'), detail);

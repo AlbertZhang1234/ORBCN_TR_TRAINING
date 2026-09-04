@@ -24,6 +24,7 @@ async function renameSupplierInvoice(db: pg.PoolClient, oldNo: string, newNo: st
   await db.query('UPDATE otto_invoice_lines SET invoiceno=$2 WHERE invoiceno=$1', [oldNo, newNo]);
   await db.query('UPDATE otto_tr_t SET invoiceno=$2 WHERE invoiceno=$1', [oldNo, newNo]);
   await db.query('UPDATE otto_supplier_invoice_drafts SET saved_invoice_no=$2 WHERE saved_invoice_no=$1', [oldNo, newNo]);
+  await db.query('UPDATE otto_invoice_attachments SET invoiceno=$2,updated_at=now() WHERE invoiceno=$1', [oldNo, newNo]);
   await db.query('DELETE FROM otto_invoices WHERE invoiceno=$1', [oldNo]);
 }
 

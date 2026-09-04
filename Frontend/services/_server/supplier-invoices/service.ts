@@ -6,7 +6,8 @@ import { validateDraft } from '../../Invoice/supplier-draft-model';
 import type { SupplierInvoiceDetail } from '../../Invoice/supplier-edit-model';
 import type { RequestAuthContext } from '../requestAuth';
 import type { Transaction } from '../supplier-drafts/repository';
-import { SupplierDraftFiles } from '../supplier-drafts/files';
+import { InvoiceAttachmentFiles } from '../invoice-attachments/files';
+import { InvoiceAttachmentRepository } from '../invoice-attachments/repository';
 import { draftContent } from '../supplier-drafts/validation';
 import { normalizeSupplierInvoiceHeader } from '../supplierInvoiceRecognition';
 import { readSupplierInvoice, writeSupplierInvoice } from './repository';
@@ -37,7 +38,8 @@ function assertAccess(auth: RequestAuthContext, detail: SupplierInvoiceDetail | 
 }
 
 export class SupplierInvoiceEditService {
-  constructor(private readonly transaction: Transaction, private readonly files: SupplierDraftFiles) {}
+  constructor(private readonly transaction: Transaction, private readonly files: InvoiceAttachmentFiles,
+    private readonly attachments: InvoiceAttachmentRepository) {}
 
   async load(auth: RequestAuthContext, invoiceNo: string) {
     if (!invoiceNo.trim()) fail('发票号码不能为空');
@@ -50,7 +52,6 @@ export class SupplierInvoiceEditService {
 
   async save(auth: RequestAuthContext, invoiceNo: string, input: SupplierInvoiceDetail) {
     const detail = normalizeDetail(input);
-    let createdFile: string | undefined;
     try {
       return await this.transaction(async (db) => {
         const current = await readSupplierInvoice(db, invoiceNo, 'write');
@@ -60,11 +61,10 @@ export class SupplierInvoiceEditService {
         if (detail.header.status !== current.header.status) fail('请通过提交或记账操作修改流程状态');
         if (!privileged(auth) && detail.header.userid !== current.header.userid) fail('无权更改发票所属用户', 403);
         await this.checkReferences(db, detail, current);
-        if (invoiceNo !== detail.header.invoiceno) createdFile = await this.preserveLegacySource(db, current);
+        if (invoiceNo !== detail.header.invoiceno) await this.preserveLegacySource(db, current);
         return writeSupplierInvoice(db, invoiceNo, detail);
       });
     } catch (error) {
-      if (createdFile) await this.files.remove(createdFile).catch(() => undefined);
       if ((error as { code?: string })?.code === '23505') fail('发票号码已存在，请检查后重试', 409);
       if (['22007', '22008'].includes((error as { code?: string })?.code ?? '')) fail('发票日期无效');
       throw error;
@@ -81,21 +81,11 @@ export class SupplierInvoiceEditService {
 
   private async preserveLegacySource(db: pg.PoolClient, current: SupplierInvoiceDetail) {
     const invoiceNo = current.header.invoiceno;
-    if ((await db.query('SELECT id FROM otto_supplier_invoice_drafts WHERE saved_invoice_no=$1', [invoiceNo])).rowCount) return;
-    const source = await this.files.readLegacy(invoiceNo).catch((error) => {
-      if (error instanceof ServiceError && error.status === 404) return null;
-      throw error;
-    });
+    if (await this.attachments.byInvoice(db, invoiceNo)) return;
+    const source = await this.files.findLegacyInvoice(invoiceNo);
     if (!source) return;
-    const id = randomUUID();
-    const stored = await this.files.store(id, source.bytes);
-    try {
-      await db.query(`INSERT INTO otto_supplier_invoice_drafts
-        (id,userid,filename,storage_key,content_type,file_size,status,header,lines,saved_invoice_no)
-        VALUES($1,$2,$3,$4,$5,$6,'saved',$7::jsonb,$8::jsonb,$9)`, [id, current.header.userid,
-        source.filename, stored.storage_key, stored.content_type, source.bytes.length,
-        JSON.stringify(current.header), JSON.stringify(current.lines), invoiceNo]);
-      return stored.storage_key;
-    } catch (error) { await this.files.remove(stored.storage_key).catch(() => undefined); throw error; }
+    await this.attachments.replace(db, { id: randomUUID(), invoiceno: invoiceNo,
+      storage_kind: source.storage_kind, storage_key: source.storage_key, original_filename: source.filename,
+      content_type: source.content_type, file_size: source.file_size });
   }
 }

@@ -13,7 +13,7 @@ export async function processNextSupplierDraft(
   const row = await repo.claim(token);
   if (!row) return false;
   try {
-    const bytes = await files.read(row.storage_key);
+    const bytes = await files.read(row.storage_kind, row.storage_key);
     const result = await recognize(new File([new Uint8Array(bytes)], row.filename, { type: row.content_type }));
     await repo.finish(row.id, token, recognizedContent(row.header, result), result, null);
   } catch (error) {

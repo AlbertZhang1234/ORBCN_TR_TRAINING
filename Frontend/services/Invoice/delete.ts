@@ -1,20 +1,17 @@
 import { ServiceError } from '../_core/error';
-import { deleteRows } from '../_core/supabaseRest';
-import { TABLES } from '../_core/tables';
-import { ensureInvoiceContentMutable, getInvoiceByNo } from './_shared';
+import { getClientSessionId } from '../_core/session';
 
 export async function deleteInvoice(invoiceNo: string): Promise<boolean> {
   if (!invoiceNo?.trim()) {
     throw new ServiceError('invoiceNo is required');
   }
 
-  const invoice = await getInvoiceByNo(invoiceNo);
-  if (!invoice) {
-    return false;
+  const response = await fetch(`/api/invoice/source?invoiceNo=${encodeURIComponent(invoiceNo.trim())}`, {
+    method: 'DELETE', headers: { 'x-session-id': getClientSessionId() },
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new ServiceError(typeof body?.message === 'string' ? body.message : `Delete invoice failed (${response.status})`);
   }
-
-  ensureInvoiceContentMutable(invoice);
-
-  const deleted = await deleteRows(TABLES.invoice, { invoiceno: invoiceNo });
-  return deleted.length > 0;
+  return Boolean((await response.json()).deleted);
 }

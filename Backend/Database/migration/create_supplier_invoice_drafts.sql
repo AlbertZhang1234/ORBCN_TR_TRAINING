@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS otto_supplier_invoice_drafts (
   userid TEXT NOT NULL,
   filename TEXT NOT NULL,
   storage_key TEXT NOT NULL UNIQUE,
+  storage_kind TEXT NOT NULL DEFAULT 'managed' CHECK (storage_kind IN ('managed','legacy-supplier')),
   content_type TEXT NOT NULL,
   file_size BIGINT NOT NULL CHECK (file_size > 0),
   status TEXT NOT NULL DEFAULT 'queued'

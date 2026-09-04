@@ -1,6 +1,3 @@
-import path from 'path';
-import { readdir, readFile } from 'fs/promises';
-
 import { normalizeWorkflowStatus, readFirstExisting } from '@/services/_core/locks';
 import { query } from '@/lib/db';
 import { getResolvedSmtpConfig } from '@/services/Email/config';
@@ -22,10 +19,6 @@ interface ReimbursementLineRow extends Record<string, unknown> {
 const APPROVAL_STATUS_CANDIDATES = ['approvalstatus', 'approval_status'];
 const DEFAULT_TR_RECEIVER = 'financechina@orbis-group.com';
 
-function sanitizeFileBaseName(value: string): string {
-  return value.trim().replace(/[^a-zA-Z0-9._-]/g, '_');
-}
-
 function buildSubject(header: ReimbursementHeaderRow): string {
   const rawNo = String(header.trno ?? header.id ?? '').trim();
   const normalized = rawNo.replace(/^TR/i, '').trim();
@@ -35,39 +28,6 @@ function buildSubject(header: ReimbursementHeaderRow): string {
 function isHeaderApproved(header: ReimbursementHeaderRow): boolean {
   const raw = readFirstExisting(header, APPROVAL_STATUS_CANDIDATES);
   return normalizeWorkflowStatus(raw) === 'APPROVED';
-}
-
-async function findInvoiceFiles(
-  invoiceNos: string[],
-  dataDir: string,
-): Promise<{
-  attachments: { filename: string; content: Buffer }[];
-  missing: string[];
-}> {
-  const entries = await readdir(dataDir).catch(() => []);
-  const fileMap = new Map<string, string>();
-  for (const name of entries) {
-    const base = path.parse(name).name;
-    if (!fileMap.has(base)) {
-      fileMap.set(base, name);
-    }
-  }
-
-  const missing: string[] = [];
-  const attachments: { filename: string; content: Buffer }[] = [];
-  for (const invoiceNo of invoiceNos) {
-    const safeBase = sanitizeFileBaseName(invoiceNo);
-    const fileName = fileMap.get(safeBase);
-    if (!fileName) {
-      missing.push(invoiceNo);
-      continue;
-    }
-    const filePath = path.join(dataDir, fileName);
-    const content = await readFile(filePath);
-    attachments.push({ filename: fileName, content });
-  }
-
-  return { attachments, missing };
 }
 
 export interface NotifyFinanceInput {
@@ -82,8 +42,16 @@ export interface NotifyFinanceResult {
   missing: string[];
 }
 
+export interface NotifyFinanceDependencies {
+  readInvoiceFiles: (invoiceNos: string[]) => Promise<{
+    files: Array<{ filename: string; bytes: Buffer }>;
+    missing: string[];
+  }>;
+}
+
 export async function notifyFinanceOfApprovedReimbursement(
   input: NotifyFinanceInput,
+  dependencies: NotifyFinanceDependencies,
 ): Promise<NotifyFinanceResult> {
   const reimbursementId = input.reimbursementId;
   const reimbursementNo = String(input.reimbursementNo ?? '').trim() || undefined;
@@ -127,8 +95,9 @@ export async function notifyFinanceOfApprovedReimbursement(
     throw new Error('No invoices found for reimbursement');
   }
 
-  const dataDir = path.join(process.cwd(), 'data');
-  const { attachments, missing } = await findInvoiceFiles(invoiceNos, dataDir);
+  const loaded = await dependencies.readInvoiceFiles(invoiceNos);
+  const attachments = loaded.files.map((file) => ({ filename: file.filename, content: file.bytes }));
+  const { missing } = loaded;
   const smtpConfig = getResolvedSmtpConfig();
 
   const to = smtpConfig.to ?? DEFAULT_TR_RECEIVER;

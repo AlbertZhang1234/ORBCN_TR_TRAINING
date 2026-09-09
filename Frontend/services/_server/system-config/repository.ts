@@ -4,8 +4,14 @@ import { ServiceError } from '../../_core/error';
 
 function configurationError(error: unknown): never {
   if ((error as { code?: string })?.code === '42P01')
-    throw new ServiceError('系统配置未初始化，请执行 create_system_config.sql / Apply the system configuration migration', { status: 503 });
+    throw new ServiceError('系统配置未初始化，请执行 create_system_config.sql / Apply the system configuration migration',
+      { status: 503, code: 'SYSTEM_CONFIG_MISSING' });
   throw error;
+}
+
+function missingConfiguration(): ServiceError {
+  return new ServiceError('系统配置未初始化，请执行 create_system_config.sql',
+    { status: 503, code: 'SYSTEM_CONFIG_MISSING' });
 }
 
 export class SystemConfigRepository {
@@ -13,7 +19,7 @@ export class SystemConfigRepository {
   async read(): Promise<SystemConfigSnapshot> {
     try {
       const row = (await this.query('SELECT value, version, updated_at FROM otto_system_config WHERE key=$1', ['invoice_recognition']))[0];
-      if (!row) throw new ServiceError('系统配置未初始化，请执行 create_system_config.sql', { status: 503 });
+      if (!row) throw missingConfiguration();
       return { values: validateRecognitionSettings(row.value), version: row.version, updatedAt: row.updated_at?.toISOString() ?? null };
     } catch (error) { return configurationError(error); }
   }

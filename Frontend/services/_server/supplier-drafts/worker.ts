@@ -9,8 +9,20 @@ import { defaultRecognitionSettings } from '../../SystemConfig/model';
 export async function processNextSupplierDraft(
   repo: SupplierDraftRepository, files: SupplierDraftFiles, recognize: (file: File) => Promise<InvoiceParseResult>,
 ): Promise<boolean> {
+  return processSupplierDraft(repo, files, recognize);
+}
+
+export async function processSupplierDraftById(
+  repo: SupplierDraftRepository, files: SupplierDraftFiles, recognize: (file: File) => Promise<InvoiceParseResult>, id: string,
+): Promise<boolean> {
+  return processSupplierDraft(repo, files, recognize, id);
+}
+
+async function processSupplierDraft(
+  repo: SupplierDraftRepository, files: SupplierDraftFiles, recognize: (file: File) => Promise<InvoiceParseResult>, id?: string,
+): Promise<boolean> {
   const token = randomUUID();
-  const row = await repo.claim(token);
+  const row = await repo.claim(token, id);
   if (!row) return false;
   try {
     const bytes = await files.read(row.storage_kind, row.storage_key);
@@ -31,6 +43,8 @@ export function startSupplierDraftWorker(run: () => Promise<boolean>, report: (e
   let active = 0;
   let stopped = false;
   let checking = false;
+  let timer: ReturnType<typeof setInterval>;
+  const stop = () => { stopped = true; if (timer) clearInterval(timer); };
   const tick = async () => {
     if (stopped || checking) return;
     checking = true;
@@ -43,11 +57,14 @@ export function startSupplierDraftWorker(run: () => Promise<boolean>, report: (e
           if (worked && !stopped) void tick();
         });
       }
-    } catch (error) { report(error); }
+    } catch (error) {
+      report(error);
+      if (error instanceof ServiceError && error.code === 'SYSTEM_CONFIG_MISSING') stop();
+    }
     finally { checking = false; }
   };
-  const timer = setInterval(() => void tick(), pollMs);
+  timer = setInterval(() => void tick(), pollMs);
   timer.unref();
   void tick();
-  return () => { stopped = true; clearInterval(timer); };
+  return stop;
 }

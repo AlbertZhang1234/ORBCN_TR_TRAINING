@@ -3,6 +3,7 @@ import test from 'node:test';
 import { mapConcurrent } from '../services/_core/concurrency';
 import { defaultRecognitionSettings, validateRecognitionSettings } from '../services/SystemConfig/model';
 import { createRecognitionService, type RecognitionDependencies } from '../services/_server/recognition-service';
+import { RecognitionGate } from '../services/_server/recognition-gate';
 import { SystemConfigService } from '../services/_server/system-config/service';
 import { startSupplierDraftWorker } from '../services/_server/supplier-drafts/worker';
 import type { RequestAuthContext } from '../services/_server/requestAuth';
@@ -89,6 +90,37 @@ test('failed upstream releases its lease and preserves actionable page-limit err
   await assert.rejects(createRecognitionService(deps)(new File(['x'], 'test.pdf')),
     (error: ServiceError) => error.status === 422 && error.message.includes('Split this PDF'));
   assert.equal(releases(), 1);
+});
+
+test('recognition loads settings and rules concurrently before admission', async () => {
+  const settings = deferred<Awaited<ReturnType<RecognitionDependencies['settings']>>>();
+  const rules = deferred<unknown[]>();
+  let settingsStarted = false, rulesStarted = false;
+  const { deps } = recognitionDependencies({
+    settings: () => { settingsStarted = true; return settings.promise; },
+    rules: () => { rulesStarted = true; return rules.promise; },
+  });
+  const work = createRecognitionService(deps)(new File(['x'], 'test.pdf'));
+  await pause();
+  assert.equal(settingsStarted, true);
+  assert.equal(rulesStarted, true);
+  settings.resolve({ values: defaultRecognitionSettings, version: 1, updatedAt: null });
+  rules.resolve([{ code: 'SOBE' }]);
+  await work;
+});
+
+test('recognition gate locks once and combines cleanup with admission', async () => {
+  const statements: string[] = [];
+  const transaction = async <T>(work: (db: { query: (sql: string) => Promise<{ rows: object[] }> }) => Promise<T>) =>
+    work({ query: async (sql) => { statements.push(sql); return { rows: [{ id: 'lease' }] }; } });
+  const gate = new RecognitionGate(transaction as never);
+  const release = await gate.acquire(1, 30);
+  assert.equal(statements.length, 2);
+  assert.match(statements[0], /pg_advisory_xact_lock/);
+  assert.match(statements[1], /DELETE FROM otto_invoice_recognition_leases/);
+  assert.match(statements[1], /INSERT INTO otto_invoice_recognition_leases/);
+  await release();
+  assert.equal(statements.length, 3);
 });
 
 test('supplier worker immediately fills freed slots and honors a lowered limit', async () => {

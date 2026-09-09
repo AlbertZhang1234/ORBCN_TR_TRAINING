@@ -19,14 +19,19 @@ export function createRecognitionService(deps: RecognitionDependencies) {
     let release: (() => Promise<void>) | undefined;
     let status = 'error';
     try {
-      const { values, version } = await deps.settings();
-      const settingsLoaded = Date.now();
-      const rules = await deps.rules();
+      const metadataStarted = Date.now();
+      const [settingsResult, rulesResult] = await Promise.all([
+        deps.settings().then((value) => ({ value, elapsed: Date.now() - metadataStarted })),
+        deps.rules().then((value) => ({ value, elapsed: Date.now() - metadataStarted })),
+      ]);
+      const { values, version } = settingsResult.value;
+      const rules = rulesResult.value;
       if (!rules.length) throw new ServiceError('No active booking rules configured', { status: 503 });
       const waiting = Date.now();
       release = await deps.acquire(values.queue_timeout_seconds, values.total_timeout_seconds + 60);
       await deps.log('recognition_admitted', { request_id: requestId, queue_ms: Date.now() - waiting,
-        config_ms: settingsLoaded - started, rules_ms: waiting - settingsLoaded, config_version: version, bytes: file.size });
+        config_ms: settingsResult.elapsed, rules_ms: rulesResult.elapsed,
+        metadata_ms: waiting - metadataStarted, config_version: version, bytes: file.size });
       const form = new FormData();
       form.append('file', file, file.name);
       form.append('booking_rules', JSON.stringify(rules));

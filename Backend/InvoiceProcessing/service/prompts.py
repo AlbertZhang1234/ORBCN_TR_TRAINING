@@ -18,6 +18,20 @@ def build_messages(prompt: str, rules: list[dict], images: list[str]) -> list[di
     ]
 
 
+def build_text_messages(prompt: str, rules: list[dict], text: str) -> list[dict]:
+    instruction = (
+        '以下内容来自PDF原生文本层。只依据所给文本提取发票抬头、金额和全部明细，只输出JSON。'
+        '不得猜测缺失字段；字段缺失返回null或空字符串。category_code只能使用提供的记账规则代码。'
+        '必须把运费、管理费等计入合计的收费项作为明细，确保明细金额合计与抬头金额一致。'
+        '金额保持原始币种；无税发票的tax_amount填0。currency必须为ISO三位代码。'
+        f'JSON结构：{json.dumps(RESPONSE_SCHEMA, ensure_ascii=False)}\n\nPDF文本：\n{text}'
+    )
+    return [
+        {'role': 'system', 'content': prompt + '\n\n' + _build_booking_rule_prompt(rules)},
+        {'role': 'user', 'content': instruction},
+    ]
+
+
 def image_parts(images: list[str]) -> list[dict]:
     return [{'type': 'image_url', 'image_url': {'url': f'data:image/jpeg;base64,{image}'}} for image in images]
 

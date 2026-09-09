@@ -24,13 +24,19 @@ export class SupplierDraftRepository {
        AND status <> 'saved' ORDER BY created_at DESC`, [userid],
     )).rows);
   }
-  async claim(token: string): Promise<DraftRow | undefined> {
+  async byId(id: string, userid: string): Promise<DraftRow | undefined> {
+    return this.transaction(async (db) => (await db.query<DraftRow>(
+      'SELECT * FROM otto_supplier_invoice_drafts WHERE id=$1 AND userid=$2', [id, userid],
+    )).rows[0]);
+  }
+  async claim(token: string, id?: string): Promise<DraftRow | undefined> {
     return this.transaction(async (db) => (await db.query<DraftRow>(
       `UPDATE otto_supplier_invoice_drafts SET status='recognizing', lease_token=$1,
          lease_until=now()+interval '5 minutes', updated_at=now(), version=version+1
        WHERE id=(SELECT id FROM otto_supplier_invoice_drafts
-         WHERE status='queued' OR (status='recognizing' AND lease_until < now())
-         ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *`, [token],
+         WHERE ($2::uuid IS NULL OR id=$2)
+         AND (status='queued' OR (status='recognizing' AND lease_until < now()))
+         ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *`, [token, id ?? null],
     )).rows[0]);
   }
   async finish(id: string, token: string, content: unknown, result: unknown, error: string | null) {

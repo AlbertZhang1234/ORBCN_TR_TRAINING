@@ -22,6 +22,7 @@ from service.models import ExtractionError
 from service.preprocessing import prepare_content
 from service.runtime import create_runtime
 from service.telemetry import create_logger
+from service.text_strategy import assess_text_quality
 from service.tuning import validate_options
 
 SCHEMA = json.loads(Path(__file__).with_name('tuning.schema.json').read_text(encoding='utf-8'))
@@ -68,10 +69,10 @@ class PreprocessingTests(unittest.TestCase):
 
 
 class RecognitionTests(unittest.IsolatedAsyncioTestCase):
-    async def run_recognition(self, responses, tuning=None):
+    async def run_recognition(self, responses, tuning=None, document_text=''):
         calls = []
         async def prepare(*args):
-            return content()
+            return {**content(), 'text': document_text}
         async def invoke(messages, timeout):
             calls.append(messages)
             response = responses.pop(0)
@@ -81,6 +82,20 @@ class RecognitionTests(unittest.IsolatedAsyncioTestCase):
         recognizer = InvoiceRecognizer(prepare, invoke, 'fixture prompt', logging.Logger('test'))
         result, timings = await recognizer.recognize(b'fixture', 'test.pdf', RULES, tuning or options(), 'test-id')
         return result, timings, calls
+
+    @staticmethod
+    def text_document():
+        return ('Invoice 12345678\nDate 2025-02-03\nSeller Example Industries GmbH\n'
+                'Currency EUR\nDescription Quantity Unit Price Net VAT Gross\n'
+                'Consulting service 1 100.00 100.00 13.00 113.00\nTotal 113.00\nVAT 13.00\n' * 3)
+
+    @staticmethod
+    def complete_result(invoice_number='12345678'):
+        return json.dumps({'category_code': 'SOBE', 'confidence': 0.98, 'invoice_number': invoice_number,
+            'issue_date': '2025-02-03', 'seller_name': 'Example Industries GmbH', 'currency': 'EUR',
+            'amount_excl_tax': 100, 'tax_amount': 13, 'amount_incl_tax': 113,
+            'line_items': [{'line_no': 1, 'description': 'Consulting service', 'amount_excl_tax': 100,
+                            'amount_incl_tax': 113}]})
 
     async def test_one_call_extracts_fields_and_derives_existing_total(self):
         result, timings, calls = await self.run_recognition([
@@ -109,6 +124,37 @@ class RecognitionTests(unittest.IsolatedAsyncioTestCase):
     async def test_disabled_amount_repair_never_calls_again(self):
         _, _, calls = await self.run_recognition(['{"invoice_number":"123"}'], options(amount_repair_enabled=False))
         self.assertEqual(len(calls), 1)
+
+    async def test_valid_native_text_uses_fast_path_without_rendered_images(self):
+        result, timings, calls = await self.run_recognition([self.complete_result()],
+            options(text_fast_path_enabled=True), self.text_document())
+        self.assertEqual(result.invoice_number, '12345678')
+        self.assertTrue(timings['text_fast_path'])
+        self.assertEqual(timings['model_attempts'], 1)
+        self.assertIsInstance(calls[0][1]['content'], str)
+
+    async def test_invalid_text_amounts_fall_back_to_vision(self):
+        invalid = json.dumps({**json.loads(self.complete_result()), 'amount_incl_tax': 999})
+        result, timings, calls = await self.run_recognition([invalid, self.complete_result('vision-123')],
+            options(text_fast_path_enabled=True), self.text_document())
+        self.assertEqual(result.invoice_number, 'vision-123')
+        self.assertFalse(timings['text_fast_path'])
+        self.assertFalse(timings['text_candidate_valid'])
+        self.assertEqual(len(calls), 2)
+        self.assertIsInstance(calls[1][1]['content'], list)
+
+    async def test_shadow_compares_both_paths_but_returns_vision_result(self):
+        result, timings, calls = await self.run_recognition(
+            [self.complete_result('text-123'), self.complete_result('vision-123')],
+            options(text_shadow_sample_percent=100), self.text_document())
+        self.assertEqual(result.invoice_number, 'vision-123')
+        self.assertTrue(timings['text_shadow_sampled'])
+        self.assertFalse(timings['text_fast_path'])
+        self.assertEqual(len(calls), 2)
+
+    def test_text_quality_rejects_sparse_ocr_and_accepts_invoice_text(self):
+        self.assertFalse(assess_text_quality('Invoice 123').eligible)
+        self.assertTrue(assess_text_quality(self.text_document()).eligible)
 
     async def test_unusable_image_result_fails_instead_of_empty_success(self):
         with self.assertRaises(ExtractionError):

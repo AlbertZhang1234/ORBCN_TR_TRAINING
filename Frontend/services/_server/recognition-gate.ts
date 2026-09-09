@@ -9,14 +9,20 @@ export class RecognitionGate {
   private claim(id: string, leaseSeconds: number): Promise<boolean> {
     return this.transaction(async (db) => {
       // Serialize only admission, never hold this transaction during HTTP/model work.
+      // A separate lock statement gives READ COMMITTED a fresh snapshot after a waiter
+      // acquires the lock, so it sees the preceding transaction's committed lease.
       await db.query('SELECT pg_advisory_xact_lock(8201, 1)');
-      await db.query('DELETE FROM otto_invoice_recognition_leases WHERE expires_at <= now()');
       const row = (await db.query(
-        `INSERT INTO otto_invoice_recognition_leases(id, expires_at)
-         SELECT $1, now()+make_interval(secs => $2) WHERE
-           (SELECT count(*) FROM otto_invoice_recognition_leases) <
-           (SELECT COALESCE((value->>'recognition_concurrency')::int, $3)
-            FROM otto_system_config WHERE key='invoice_recognition') RETURNING id`,
+        `WITH expired AS (
+           DELETE FROM otto_invoice_recognition_leases WHERE expires_at <= now() RETURNING id
+         ), admitted AS (
+           INSERT INTO otto_invoice_recognition_leases(id, expires_at)
+           SELECT $1, now()+make_interval(secs => $2) WHERE
+             (SELECT count(*) FROM otto_invoice_recognition_leases WHERE expires_at > now()) <
+             COALESCE((SELECT (value->>'recognition_concurrency')::int
+                       FROM otto_system_config WHERE key='invoice_recognition'), $3)
+           RETURNING id
+         ) SELECT id FROM admitted`,
         [id, leaseSeconds, defaultRecognitionSettings.recognition_concurrency],
       )).rows[0];
       return Boolean(row);

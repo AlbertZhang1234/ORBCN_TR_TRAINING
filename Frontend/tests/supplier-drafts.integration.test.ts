@@ -9,7 +9,7 @@ import { SupplierDraftRepository } from '../services/_server/supplier-drafts/rep
 import { SupplierDraftFiles } from '../services/_server/supplier-drafts/files';
 import { SupplierDraftService } from '../services/_server/supplier-drafts/service';
 import { SupplierSourceService } from '../services/_server/supplier-drafts/source';
-import { processNextSupplierDraft } from '../services/_server/supplier-drafts/worker';
+import { processNextSupplierDraft, processSupplierDraftById } from '../services/_server/supplier-drafts/worker';
 import { InvoiceAttachmentRepository } from '../services/_server/invoice-attachments/repository';
 import { InvoiceAttachmentService } from '../services/_server/invoice-attachments/service';
 import type { RequestAuthContext } from '../services/_server/requestAuth';
@@ -104,6 +104,12 @@ test('durable upload, background completion, restore, edits, atomic save, permis
       await db.query("INSERT INTO otto_invoices(invoiceno,userid,businesstype) VALUES('LEGACY','test-owner','01')");
       await writeFile(path.join(root, 'LEGACY.pdf'), '%PDF-1.4\nlegacy fixture');
       assert.equal((await source.read(auth, null, 'LEGACY')).bytes.toString(), '%PDF-1.4\nlegacy fixture');
+      const inlineService = new SupplierDraftService(repo, files, 1024 * 1024, attachmentRepo,
+        (id) => processSupplierDraftById(repo, files, async () => ({ ...parsed, invoice_number: 'INLINE-FAST' }), id));
+      const inline = await inlineService.upload(auth, pdf, '01');
+      assert.equal(inline.status, 'ready');
+      assert.equal(inline.header.invoiceno, 'INLINE-FAST');
+      assert.equal(inline.lines[0].description, 'Item');
       await assert.rejects(service.upload(auth, pdf, '03'), /01 或 02/);
       assert.throws(() => files.read('managed', '../escape.pdf'), /Invalid managed file key/);
     } finally {

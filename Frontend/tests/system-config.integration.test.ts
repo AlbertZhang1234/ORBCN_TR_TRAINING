@@ -32,6 +32,9 @@ test('database settings persist with conflict protection and admission is shared
       assert.equal((await repo.read()).values.recognition_concurrency, 1);
       await assert.rejects(repo.save(initial.values, initial.version, 'fixture-admin'), (error: ServiceError) => error.status === 409);
       const gateA = new RecognitionGate(transaction), gateB = new RecognitionGate(transaction);
+      const simultaneous = await Promise.allSettled([gateA.acquire(0.05, 30), gateB.acquire(0.05, 30)]);
+      assert.equal(simultaneous.filter((entry) => entry.status === 'fulfilled').length, 1);
+      for (const entry of simultaneous) if (entry.status === 'fulfilled') await entry.value();
       const releaseA = await gateA.acquire(1, 30);
       await assert.rejects(gateB.acquire(0.02, 30), (error: ServiceError) => error.code === 'RECOGNITION_BUSY');
       await releaseA();

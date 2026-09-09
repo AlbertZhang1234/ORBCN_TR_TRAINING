@@ -11,7 +11,8 @@ import { draftContent, requireDraftId } from './validation';
 
 export class SupplierDraftService {
   constructor(private readonly repo: SupplierDraftRepository, private readonly files: SupplierDraftFiles,
-    private readonly maxBytes: number, private readonly attachments: InvoiceAttachmentRepository) {}
+    private readonly maxBytes: number, private readonly attachments: InvoiceAttachmentRepository,
+    private readonly recognizeUploaded?: (id: string) => Promise<boolean>) {}
 
   async list(auth: RequestAuthContext) { return (await this.repo.list(auth.userid)).map(draftView); }
 
@@ -20,17 +21,22 @@ export class SupplierDraftService {
     if (!file.size || file.size > this.maxBytes) throw new ServiceError(`文件必须非空且不超过 ${this.maxBytes / 1024 / 1024} MB`, { status: 400 });
     const id = randomUUID();
     const stored = await this.files.store(id, Buffer.from(await file.arrayBuffer()));
+    let queued: DraftRow;
     try {
-      return await this.repo.transaction(async (db) => draftView((await db.query<DraftRow>(
+      queued = await this.repo.transaction(async (db) => (await db.query<DraftRow>(
         `INSERT INTO otto_supplier_invoice_drafts(id,userid,filename,storage_key,storage_kind,content_type,file_size,header)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb) RETURNING *`,
         [id,auth.userid,file.name.slice(0,255),stored.storage_key,stored.storage_kind,stored.content_type,file.size,
           JSON.stringify(emptyHeader(businessType as '01'|'02'))],
-      )).rows[0]));
+      )).rows[0]);
     } catch (error) {
       await this.files.remove(stored.storage_kind, stored.storage_key).catch(() => undefined);
       throw error;
     }
+    if (!this.recognizeUploaded) return draftView(queued);
+    await this.recognizeUploaded(id).catch(() => false); // The durable queued task remains available to the worker.
+    const current = await this.repo.byId(id, auth.userid).catch(() => undefined);
+    return draftView(current ?? queued);
   }
 
   private async locked(db: pg.PoolClient, auth: RequestAuthContext, id: string, version?: number) {

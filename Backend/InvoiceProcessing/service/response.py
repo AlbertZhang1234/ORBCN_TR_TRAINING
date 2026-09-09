@@ -69,7 +69,8 @@ def response_payload(result: InvoiceExtractionResult, filename: str, request_id:
     data.pop('raw_model_output', None)
     data.update(file=filename, status=200, issue_date=_normalize_date(result.issue_date),
                 confidence=round(float(result.confidence), 4), line_items_count=len(result.line_items),
-                engine='native_pdf_rule_based' if result.fallback_used else 'vision_llm',
+                engine=('native_pdf_rule_based' if result.fallback_used else
+                        'text_llm' if timings.get('text_fast_path') else 'vision_llm'),
                 request_id=request_id, timings=timings)
     for key in ('amount_excl_tax', 'tax_amount', 'amount_incl_tax'):
         data[key] = _round2(data[key])

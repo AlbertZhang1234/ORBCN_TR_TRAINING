@@ -298,7 +298,7 @@ export default function CustomersPage() {
           type: 'multi-select',
           options: buildOptions(rows.map((row) => String(row.language ?? '').trim())),
         },
-        { id: 'actualpaymentterm', label: t('actual_payment_term', 'Customer Payment Term'), type: 'text' },
+        { id: 'actualpaymentterm', label: t('actual_payment_term', 'Actual Payment Term'), type: 'text' },
         { id: 'bankaccount', label: t('bank_account', 'Bank Account'), type: 'text' },
       ];
     },
@@ -368,7 +368,7 @@ export default function CustomersPage() {
       { id: 'fullname_en', label: t('fullname_en', 'Full Name (EN)'), minWidth: 200 },
       { id: 'email', label: t('email', 'Email'), minWidth: 200 },
       { id: 'language', label: t('language', 'Language'), minWidth: 140 },
-      { id: 'actualpaymentterm', label: t('actual_payment_term', 'Customer Payment Term'), minWidth: 220 },
+      { id: 'actualpaymentterm', label: t('actual_payment_term', 'Actual Payment Term'), minWidth: 220 },
       { id: 'bankaccount', label: t('bank_account', 'Bank Account'), minWidth: 220 },
     ],
     [t],
@@ -535,7 +535,7 @@ export default function CustomersPage() {
               fullWidth
             />
             <TextField
-              label={t('actual_payment_term', 'Customer Payment Term')}
+              label={t('actual_payment_term', 'Actual Payment Term')}
               value={actualPaymentTerm}
               onChange={(e) => setActualPaymentTerm(e.target.value)}
               fullWidth
@@ -618,7 +618,7 @@ export default function CustomersPage() {
               fullWidth
             />
             <TextField
-              label={t('actual_payment_term', 'Customer Payment Term')}
+              label={t('actual_payment_term', 'Actual Payment Term')}
               value={actualPaymentTerm}
               onChange={(e) => setActualPaymentTerm(e.target.value)}
               fullWidth
